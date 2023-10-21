@@ -1,7 +1,7 @@
 package sqlite
 
 const (
-	createUsersTable = `
+  createUsersTable = `
 CREATE TABLE IF NOT EXISTS users (
   Id INT PRIMARY KEY,
   UserEmail TEXT,
@@ -9,13 +9,13 @@ CREATE TABLE IF NOT EXISTS users (
   IsActive BIT
   )`
 
-	createReportsTable = `
+  createReportsTable = `
 CREATE TABLE IF NOT EXISTS reports (
   Id INT PRIMARY KEY,
   UserId INT
   )`
 
-	createRowsTable = `
+  createRowsTable = `
 CREATE TABLE IF NOT EXISTS rows (
   ReportId INT,
   Date TEXT,
@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS rows (
   TimeSpent REAL
   )`
 
-	getFullUsers = `
+  getFullUsers = `
 SELECT 
   u.Id, u.UserEmail, u.UserToken, u.IsActive,
   r.Id, r.UserId, 
@@ -35,7 +35,7 @@ FROM users u
 LIMIT ?
 OFFSET ?`
 
-	getUserById = `
+  getUserById = `
 SELECT 
   Id, UserEmail, UserToken, IsActive 
 FROM users 
