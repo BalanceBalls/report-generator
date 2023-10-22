@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	htmlgenerator "github.com/BalanceBalls/report-generator/generator/html"
 	"github.com/BalanceBalls/report-generator/storage"
 	"github.com/BalanceBalls/report-generator/storage/sqlite"
 )
@@ -40,14 +41,19 @@ func main() {
 
 	nestedUsers := convUser.Convert()
 
+	htmlGen := htmlgenerator.New("reports", "html-report.tmpl")
 	for _, nu := range nestedUsers {
-		tJson, err := json.Marshal(&nu)
+		_, err := json.Marshal(&nu)
 
 		if err != nil {
 			panic(err)
 		}
 
-		fmt.Println("New USER")
-		fmt.Println(string(tJson))
+		if _, hErr := htmlGen.Generate(nu.Reports[0]); hErr != nil {
+			fmt.Println(hErr)
+		}
+
+		// fmt.Println("New USER")
+		// fmt.Println(string(tJson))
 	}
 }
