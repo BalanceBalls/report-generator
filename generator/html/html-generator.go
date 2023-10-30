@@ -29,13 +29,15 @@ func New(reportsDir string, tmplName string) *HtmlGenerator {
 }
 
 func (g *HtmlGenerator) Generate(report storage.Report) (generator.GeneratedReport, error) {
+	fmt.Println("Starting report generation")
+
 	tmpl, err := template.ParseFS(tpls, g.tmplName)
 	if err != nil {
 		return generator.GeneratedReport{}, fmt.Errorf(
 			"Failed to parse template file for html report: %w", err)
 	}
 
-	path := reportPath(report.Id, g.reportsDir)
+	path := createReportPath(report.Id, g.reportsDir)
 	if err = createDirIfNotExist(g.reportsDir); err != nil {
 		return generator.GeneratedReport{}, fmt.Errorf(
 			"Failed to create reports folder: %w", err)
@@ -56,13 +58,15 @@ func (g *HtmlGenerator) Generate(report storage.Report) (generator.GeneratedRepo
 		return generator.GeneratedReport{}, fmt.Errorf(
 			"Failed to close html file: %w", err)
 	}
+	
+	fmt.Println("report generated")
 
 	return generator.GeneratedReport{}, nil
 }
 
 func createDirIfNotExist(reportsDir string) error {
 	if _, err := os.Stat(reportsDir); errors.Is(err, os.ErrNotExist) {
-		return os.Mkdir(reportsDir, fs.ModeAppend)
+		return os.Mkdir(reportsDir, fs.ModePerm)
 	}
 
 	return nil
@@ -70,13 +74,23 @@ func createDirIfNotExist(reportsDir string) error {
 
 func createFileIfNotExist(path string) (*os.File, error) {
 	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
-		return os.Create(path)
+		var f *os.File
+
+		if f,err = os.Create(path); err != nil {
+			return nil, err
+		}
+		
+		if err := f.Chmod(fs.ModePerm); err != nil {
+			return nil, err
+		}
+		
+		return f, nil
 	}
 
 	return nil, errors.New("File already exists: " + path)
 }
 
-func reportPath(id int, reportsDir string) string {
+func createReportPath(id int, reportsDir string) string {
 	fileName := "report-" + strconv.Itoa(id) + ".html"
 	path := "./" + reportsDir + "/" + fileName
 	return path

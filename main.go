@@ -23,11 +23,9 @@ func main() {
 		fmt.Println(err)
 	}
 
-	/*
-		 if err = db.Seed(); err != nil {
-			 fmt.Println(err)
-		 }
-	*/
+	 // if err = db.Seed(); err != nil {
+		//  fmt.Println(err)
+	 // }
 
 	users, err := db.Users()
 
