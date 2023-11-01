@@ -7,10 +7,11 @@ import (
 	"html/template"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"strconv"
 
-	"github.com/BalanceBalls/report-generator/generator"
-	"github.com/BalanceBalls/report-generator/storage"
+	"github.com/BalanceBalls/report-generator/internal/generator"
+	"github.com/BalanceBalls/report-generator/internal/storage"
 )
 
 type HtmlGenerator struct {
@@ -20,6 +21,8 @@ type HtmlGenerator struct {
 
 //go:embed *.tmpl
 var tpls embed.FS
+
+const pathToBin = "./bin/"
 
 func New(reportsDir string, tmplName string) *HtmlGenerator {
 	return &HtmlGenerator{
@@ -65,8 +68,9 @@ func (g *HtmlGenerator) Generate(report storage.Report) (generator.GeneratedRepo
 }
 
 func createDirIfNotExist(reportsDir string) error {
-	if _, err := os.Stat(reportsDir); errors.Is(err, os.ErrNotExist) {
-		return os.Mkdir(reportsDir, fs.ModePerm)
+	pathToDir := filepath.Join(pathToBin, reportsDir)
+	if _, err := os.Stat(pathToDir); errors.Is(err, os.ErrNotExist) {
+		return os.Mkdir(pathToDir, fs.ModePerm)
 	}
 
 	return nil
@@ -92,6 +96,6 @@ func createFileIfNotExist(path string) (*os.File, error) {
 
 func createReportPath(id int, reportsDir string) string {
 	fileName := "report-" + strconv.Itoa(id) + ".html"
-	path := "./" + reportsDir + "/" + fileName
+	path := filepath.Join(pathToBin, reportsDir, fileName)
 	return path
 }

@@ -1,14 +1,12 @@
 build:
-	go build -o ./bin/report-generator
-
-build-verbose:
-	go build -o ./bin/report-generator -x
+	go build -o ./bin/report-generator ./cmd/main.go
 
 clean:
-	rm -r ./bin
+	rm -rf ./bin
 	
 rebuild:
 	make clean && make build
 
 run:
-	make rebuild && ./bin/report-generator
+	make rebuild
+	./bin/report-generator

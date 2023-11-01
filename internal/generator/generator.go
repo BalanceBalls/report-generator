@@ -1,6 +1,6 @@
 package generator
 
-import "github.com/BalanceBalls/report-generator/storage"
+import "github.com/BalanceBalls/report-generator/internal/storage"
 
 type Generator interface {
 	Generate(report storage.Report) (GeneratedReport, error)

@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	htmlgenerator "github.com/BalanceBalls/report-generator/generator/html"
-	"github.com/BalanceBalls/report-generator/storage"
-	"github.com/BalanceBalls/report-generator/storage/sqlite"
+	htmlgenerator "github.com/BalanceBalls/report-generator/internal/generator/html"
+	"github.com/BalanceBalls/report-generator/internal/storage"
+	"github.com/BalanceBalls/report-generator/internal/storage/sqlite"
 )
 
 func main() {
@@ -14,7 +14,7 @@ func main() {
 	// Add gitlab client
 	// Add viper as config util
 
-	db, err := sqlite.New("test.sqlite")
+	db, err := sqlite.New("./bin/test.sqlite")
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -23,9 +23,9 @@ func main() {
 		fmt.Println(err)
 	}
 
-	 // if err = db.Seed(); err != nil {
-		//  fmt.Println(err)
-	 // }
+	if err = db.Seed(); err != nil {
+		fmt.Println(err)
+	}
 
 	users, err := db.Users()
 

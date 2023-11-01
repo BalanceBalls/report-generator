@@ -7,7 +7,7 @@ import (
 
 	_ "github.com/mattn/go-sqlite3"
 
-	"github.com/BalanceBalls/report-generator/storage"
+	"github.com/BalanceBalls/report-generator/internal/storage"
 )
 
 type SqliteStorage struct {
