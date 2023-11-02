@@ -52,6 +52,7 @@ func (g *HtmlGenerator) Generate(report storage.Report) (generator.GeneratedRepo
 			"Failed to create html file for report: %w", err)
 	}
 
+	// TODO: get bytes array and return 
 	if err = tmpl.ExecuteTemplate(file, g.tmplName, report.Rows); err != nil {
 		return generator.GeneratedReport{}, fmt.Errorf(
 			"Failed to generate an html report: %w", err)

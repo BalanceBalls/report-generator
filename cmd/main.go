@@ -1,20 +1,30 @@
 package main
 
 import (
-	"encoding/json"
+	// "encoding/json"
 	"fmt"
+	"go/build"
+	"os"
+	"time"
 
-	htmlgenerator "github.com/BalanceBalls/report-generator/internal/generator/html"
-	"github.com/BalanceBalls/report-generator/internal/storage"
-	"github.com/BalanceBalls/report-generator/internal/storage/sqlite"
+	"github.com/BalanceBalls/report-generator/internal/clients/gitlab"
+	// htmlgenerator "github.com/BalanceBalls/report-generator/internal/generator/html"
+	// "github.com/BalanceBalls/report-generator/internal/storage"
+	// "github.com/BalanceBalls/report-generator/internal/storage/sqlite"
 )
 
 func main() {
 	// Add telegram client
-	// Add gitlab client
 	// Add viper as config util
 
-	db, err := sqlite.New("./bin/test.sqlite")
+	gopath := os.Getenv("GOPATH")
+	if gopath == "" {
+		gopath = build.Default.GOPATH
+	}
+	fmt.Println(gopath)
+
+/*
+	db, err := sqlite.New("test.sqlite")
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -54,4 +64,25 @@ func main() {
 		// fmt.Println("New USER")
 		// fmt.Println(string(tJson))
 	}
+*/
+
+	const gitHost = "gitlab.com"
+	const gitBasePath = "api/v4"
+	const token = ""
+
+	gitClient := gitlab.New(gitHost, gitBasePath)
+	eventsReq := gitlab.EventsReq{
+		Before:    time.Time{},
+		After:     time.Time{},
+		UserId:    0,
+		UserToken: token,
+	}
+
+	events, err := gitClient.Events(eventsReq)
+
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	fmt.Println(events)
 }

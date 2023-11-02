@@ -16,10 +16,10 @@ const (
 )
 
 type EventsReq struct {
-	before    time.Time
-	after     time.Time
-	userId    int
-	userToken string
+	Before    time.Time
+	After     time.Time
+	UserId    int
+	UserToken string
 }
 
 type Event struct {
