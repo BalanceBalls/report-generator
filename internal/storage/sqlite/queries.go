@@ -3,7 +3,7 @@ package sqlite
 const (
 	createUsersTable = `
 CREATE TABLE IF NOT EXISTS users (
-  Id 							INT PRIMARY KEY,
+  Id							INT PRIMARY KEY,
   UserEmail 			TEXT,
   UserToken 			TEXT,
 	TimezoneOffset 	INT,
@@ -12,17 +12,17 @@ CREATE TABLE IF NOT EXISTS users (
 
 	createReportsTable = `
 CREATE TABLE IF NOT EXISTS reports (
-  Id 			INTEGER PRIMARY KEY AUTOINCREMENT,
-  UserId 	INT
+  Id			INTEGER PRIMARY KEY AUTOINCREMENT,
+  UserId	INT
 )`
 
 	createRowsTable = `
 CREATE TABLE IF NOT EXISTS rows (
-  ReportId 	INT,
-  Date 			TEXT,
-  Task 			TEXT,
-  Link 			TEXT,
-  TimeSpent REAL
+  ReportId	INT,
+  Date			TEXT,
+  Task			TEXT,
+  Link			TEXT,
+  TimeSpent	REAL
 )`
 
 	getFullUsers = `
