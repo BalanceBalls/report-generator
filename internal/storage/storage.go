@@ -13,11 +13,14 @@ type Storage interface {
 }
 
 type User struct {
-	Id        int      `json:"id"`
-	UserEmail string   `json:"userEmail"`
-	UserToken string   `json:"userToken"`
-	IsActive  bool     `json:"isActive"`
-	Reports   []Report `json:"reports"`
+	Id             int      `json:"id"`
+	UserEmail      string   `json:"userEmail"`
+	UserToken      string   `json:"userToken"`
+	IsActive       bool     `json:"isActive"`
+
+	// Minutes from UTC
+	TimezoneOffset int      `json:"timezoneOffset"`
+	Reports        []Report `json:"reports"`
 }
 
 type Report struct {
@@ -35,17 +38,18 @@ type ReportRow struct {
 }
 
 type FlatUser struct {
-	Id          int
-	UserEmail   string
-	UserToken   string
-	IsActive    bool
-	ReportId    int
-	UserId      int
-	ReportRowId int
-	Date        time.Time
-	Task        string
-	Link        string
-	TimeSpent   float32
+	Id             int
+	UserEmail      string
+	UserToken      string
+	TimezoneOffset int
+	IsActive       bool
+	ReportId       int
+	UserId         int
+	ReportRowId    int
+	Date           time.Time
+	Task           string
+	Link           string
+	TimeSpent      float32
 }
 
 type ConvertableUsers struct {
@@ -64,10 +68,11 @@ func (cu *ConvertableUsers) Convert() []User {
 
 	for k, v := range flatUserMap {
 		tUser := User{
-			Id:        k[0],
-			UserEmail: v[0].UserEmail,
-			UserToken: v[0].UserToken,
-			IsActive:  v[0].IsActive,
+			Id:             k[0],
+			UserEmail:      v[0].UserEmail,
+			UserToken:      v[0].UserToken,
+			TimezoneOffset: v[0].TimezoneOffset,
+			IsActive:       v[0].IsActive,
 		}
 
 		tReport := Report{

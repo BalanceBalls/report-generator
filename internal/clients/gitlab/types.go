@@ -1,18 +1,7 @@
 package gitlab
 
-import "time"
-
-// Action names
-const (
-	commit             = "pushed to"
-	acceptMergeRequest = "accepted"
-	createMergeRequest = "opened"
-	initCommit         = "pushed new"
-)
-
-// Target types
-const (
-	mergeRequest = "MergeRequest"
+import (
+	"time"
 )
 
 type EventsReq struct {
@@ -26,6 +15,7 @@ type Event struct {
 	ProjectId   int       `json:"project_id"`
 	ActionName  string    `json:"action_name"`
 	TargetType  string    `json:"target_type"`
+	TargetIid   int       `json:"target_iid"`   // ID of MR
 	TargetTitle string    `json:"target_title"` // Merge request title
 	CreatedAt   time.Time `json:"created_at"`
 
@@ -37,4 +27,22 @@ type Event struct {
 		Ref         string `json:"ref"`          // branch name
 		CommitTitle string `json:"commit_title"` // commit message
 	} `json:"push_data"`
+
+	MR *MergeRequest `json:"-"`
+}
+
+type MergeRequest struct {
+	Title        string `json:"title"`
+	Id           int    `json:"iid"`
+	State        string `json:"state"`
+	TargetBranch string `json:"target_branch"`
+	SourceBranch string `json:"source_branch"`
+	WebUrl       string `json:"web_url"`
+}
+
+type Commit struct {
+	Id string `json:"id"`
+	ShortId string `json:"short_id"`
+	WebUrl string `json:"web_url"`
+	Title string `json:"title"`
 }

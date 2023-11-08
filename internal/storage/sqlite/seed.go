@@ -3,23 +3,23 @@ package sqlite
 import "fmt"
 
 func (s *SqliteStorage) Seed() error {
-	usersSeed := `INSERT INTO users (Id, UserEmail, UserToken, IsActive) VALUES (?, ?, ?, ?)`
+	usersSeed := `INSERT INTO users (Id, UserEmail, UserToken, TimezoneOffset, IsActive) VALUES (?, ?, ?, ?, ?)`
 
-	if _, err := s.db.Exec(usersSeed, 1, "TestEmail", "TestToken", true); err != nil {
+	if _, err := s.db.Exec(usersSeed, 1, "TestEmail", "TestToken", 300, true); err != nil {
 		return fmt.Errorf("Could not seed user data: %w", err)
 	}
 
-	if _, err := s.db.Exec(usersSeed, 2, "qwe@asd.com", "asdfjkdf;la34i", true); err != nil {
+	if _, err := s.db.Exec(usersSeed, 2, "qwe@asd.com", "asdfjkdf;la34i", 300, true); err != nil {
 		return fmt.Errorf("Could not seed user data: %w", err)
 	}
 
-	reportsSeed := `INSERT INTO reports (Id, UserId) VALUES (?, ?)`
+	reportsSeed := `INSERT INTO reports (UserId) VALUES (?)`
 
-	if _, reportsErr := s.db.Exec(reportsSeed, 1, 1); reportsErr != nil {
+	if _, reportsErr := s.db.Exec(reportsSeed, 1); reportsErr != nil {
 		return fmt.Errorf("Could not seed reports data: %w", reportsErr)
 	}
 
-	if _, reportsErr := s.db.Exec(reportsSeed, 2, 2); reportsErr != nil {
+	if _, reportsErr := s.db.Exec(reportsSeed, 2); reportsErr != nil {
 		return fmt.Errorf("Could not seed reports data: %w", reportsErr)
 	}
 
