@@ -32,35 +32,35 @@ func New(reportsDir string, tmplName string) *HtmlGenerator {
 }
 
 func (g *HtmlGenerator) Generate(report storage.Report) (generator.GeneratedReport, error) {
-	fmt.Println("Starting report generation")
+	fmt.Println("starting report generation")
 
 	tmpl, err := template.ParseFS(tpls, g.tmplName)
 	if err != nil {
 		return generator.GeneratedReport{}, fmt.Errorf(
-			"Failed to parse template file for html report: %w", err)
+			"failed to parse template file for html report: %w", err)
 	}
 
 	path := createReportPath(report.Id, g.reportsDir)
 	if err = createDirIfNotExist(g.reportsDir); err != nil {
 		return generator.GeneratedReport{}, fmt.Errorf(
-			"Failed to create reports folder: %w", err)
+			"failed to create reports folder: %w", err)
 	}
 
 	file, err := createFileIfNotExist(path)
 	if err != nil {
 		return generator.GeneratedReport{}, fmt.Errorf(
-			"Failed to create html file for report: %w", err)
+			"failed to create html file for report: %w", err)
 	}
 
 	// TODO: get bytes array and return 
 	if err = tmpl.ExecuteTemplate(file, g.tmplName, report.Rows); err != nil {
 		return generator.GeneratedReport{}, fmt.Errorf(
-			"Failed to generate an html report: %w", err)
+			"failed to generate an html report: %w", err)
 	}
 
 	if err = file.Close(); err != nil {
 		return generator.GeneratedReport{}, fmt.Errorf(
-			"Failed to close html file: %w", err)
+			"failed to close html file: %w", err)
 	}
 	
 	fmt.Println("report generated")
@@ -92,7 +92,7 @@ func createFileIfNotExist(path string) (*os.File, error) {
 		return f, nil
 	}
 
-	return nil, errors.New("File already exists: " + path)
+	return nil, errors.New("file already exists: " + path)
 }
 
 func createReportPath(id int, reportsDir string) string {

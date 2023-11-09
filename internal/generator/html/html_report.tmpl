@@ -18,14 +18,19 @@
 		</tr>
 	</thead>
 	<tbody>
-		{{ range . }}
-		<tr>
-			<td class="tg-0lax">{{ .Date }}</td>
-			<td class="tg-0lax">{{ .Task }}</td>
+		{{ range $i, $r := . }}
+		<tr id="{{ $i }}">
+			<td class="tg-0lax">{{ $r.Date }}</td>
+			<td class="tg-0lax">{{ $r.Task }}</td>
 			<td class="tg-0lax">
-				<a href="{{ .Link }}" target='blank'>{{ .Link }}</a>
+					<a href="{{ $r.Link }}" target='blank'>{{ $r.Link }}</a>
 			</td>
-			<td class="tg-0lax">{{ .TimeSpent }}ч.</td>
+			<td class="tg-0lax" id="time-row">
+				<script>
+					var time = Math.round({{ $r.TimeSpent }} * 10) / 10
+					document.querySelectorAll('#time-row')[{{$i}}].innerHTML = time + "ч"
+				</script>
+			</td>
 		</tr>
 		{{ end }}
 	</tbody>
