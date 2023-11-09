@@ -113,7 +113,22 @@ func (gb *GitlabBuilder) initPrevTime(branch2events map[string][]gitlab.Event, d
 	// Only one row in report
 	if len(branch2events) == 1 {
 		for _, events := range branch2events{
-			return events[0].CreatedAt.Add(time.Hour * -8)
+			fullWorkDay := events[0].CreatedAt.Add(time.Hour * -8) 
+
+			// When a single branch contains MR
+			hasMr, _ := gb.tryGetMrForBranch(events)
+			if hasMr {
+				return fullWorkDay 
+			}
+
+			// When a single branch has only one commit
+			commitCount := gb.getCommitsCountForBranch(events)
+			if commitCount == 1 {
+				return fullWorkDay
+			}
+
+			// When multiple commits in a single branch 
+			return events[0].CreatedAt
 		}	
 	}
 
