@@ -68,22 +68,23 @@ func (gb *GitlabBuilder) Build() (storage.Report, error) {
 		return storage.Report{}, fmt.Errorf("failed to fetch gitlab data: %w", err)
 	}
 
-	filteredEvents, err := gb.filterByTime(events, timeRangeStart, timeRangeEnd)
+	var filteredEvents []gitlab.Event
+	filteredEvents, err = gb.filterByTime(events, timeRangeStart, timeRangeEnd)
 	if err != nil {
 		return storage.Report{}, err
 	}
 
-	filteredEvents, err = gb.filterByBranches(events)
+	filteredEvents, err = gb.filterByBranches(filteredEvents)
 	if err != nil {
 		return storage.Report{}, err
 	}
 
-	filteredEvents, err = gb.filterByActions(events)
+	filteredEvents, err = gb.filterByActions(filteredEvents)
 	if err != nil {
 		return storage.Report{}, err
 	}
 
-	filteredEvents, err = gb.loadMergeRequests(events)
+	filteredEvents, err = gb.loadMergeRequests(filteredEvents)
 	if err != nil {
 		return storage.Report{}, err
 	}
@@ -104,6 +105,10 @@ func (gb *GitlabBuilder) Build() (storage.Report, error) {
 	for k, v := range branch2events {
 		row := gb.buildRow(k, v, prevTime)
 		result.Rows = append(result.Rows, row)
+
+		// Use time of the last event for the branch 
+		// as a staring point for the next branch
+		prevTime = v[len(v)-1].CreatedAt
 	}
 
 	return result, nil
@@ -112,13 +117,14 @@ func (gb *GitlabBuilder) Build() (storage.Report, error) {
 func (gb *GitlabBuilder) initPrevTime(branch2events map[string][]gitlab.Event, defaultValue time.Time) time.Time {
 	// Only one row in report
 	if len(branch2events) == 1 {
-		for _, events := range branch2events{
-			fullWorkDay := events[0].CreatedAt.Add(time.Hour * -8) 
+		for _, events := range branch2events {
+			// A point in time which will be 8 hrs prior to a git action by user
+			fullWorkDay := events[0].CreatedAt.Add(time.Hour * -8)
 
 			// When a single branch contains MR
 			hasMr, _ := gb.tryGetMrForBranch(events)
 			if hasMr {
-				return fullWorkDay 
+				return fullWorkDay
 			}
 
 			// When a single branch has only one commit
@@ -127,9 +133,9 @@ func (gb *GitlabBuilder) initPrevTime(branch2events map[string][]gitlab.Event, d
 				return fullWorkDay
 			}
 
-			// When multiple commits in a single branch 
+			// When multiple commits in a single branch
 			return events[0].CreatedAt
-		}	
+		}
 	}
 
 	return defaultValue
@@ -228,14 +234,12 @@ func (gb *GitlabBuilder) buildRow(branchName string, branchEvents []gitlab.Event
 		links, err := gb.getCommitLinks(branchEvents)
 		if err != nil {
 			taskLink = "Failed to get commits"
+		} else {
+			taskLink = strings.Join(links, "\n")
 		}
-		taskLink = strings.Join(links, "\n")
 	}
 
-	// TODO: Cover following cases
-	// 1. When it is first event (prevTime is empty)
-	// 2. When a branch has only one commit (calculate work hours from prevTime)
-	// 3. When it is first event and only event for the day
+	// Time spend = time of the last event for the branch - previous branch last event time
 	timeSpent := branchEvents[len(branchEvents)-1].CreatedAt.Sub(prevTime).Hours()
 
 	result := storage.ReportRow{
