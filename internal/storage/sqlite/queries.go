@@ -3,43 +3,47 @@ package sqlite
 const (
 	createUsersTable = `
 CREATE TABLE IF NOT EXISTS users (
-  Id							INT PRIMARY KEY,
-  UserEmail 			TEXT,
-  UserToken 			TEXT,
-	TimezoneOffset 	INT,
-  IsActive 				BIT
+  id								INT PRIMARY KEY,
+  user_email 				TEXT,
+  user_token 				TEXT,
+	timezone_offset 	INT,
+  is_active 				BIT
 )`
 
 	createReportsTable = `
 CREATE TABLE IF NOT EXISTS reports (
-  Id			INTEGER PRIMARY KEY AUTOINCREMENT,
-  UserId	INT
+  id			INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id	INT,
+
+	FOREIGN KEY(user_id) REFERENCES users(id)
 )`
 
 	createRowsTable = `
 CREATE TABLE IF NOT EXISTS rows (
-  ReportId	INT,
-  Date			TEXT,
-  Task			TEXT,
-  Link			TEXT,
-  TimeSpent	REAL
+  report_id		INT,
+  date				TEXT,
+  task				TEXT,
+  link				TEXT,
+  time_spent	REAL,
+
+	FOREIGN KEY(report_id) REFERENCES reports(id)
 )`
 
 	getFullUsers = `
 SELECT 
-  u.Id, u.UserEmail, u.UserToken, u.IsActive,
-  r.Id, r.UserId, 
-  ro.ReportId, ro.Date, ro.Task, ro.Link, ro.TimeSpent
+  u.id, u.user_email, u.user_token, u.is_active,
+  r.id, r.user_id, 
+  ro.report_id, ro.date, ro.task, ro.link, ro.time_spent
 FROM users u 
-  INNER JOIN reports r on r.UserId = u.Id
-  INNER JOIN rows ro on ro.ReportId = r.Id
+  INNER JOIN reports r on r.user_id = u.id
+  INNER JOIN rows ro on ro.report_id = r.id
 LIMIT ?
 OFFSET ?`
 
 	getUserById = `
 SELECT 
-  Id, UserEmail, UserToken, IsActive 
+  id, user_email, user_token, is_active 
 FROM users 
-WHERE Id = ?
+WHERE id = ?
   `
 )
