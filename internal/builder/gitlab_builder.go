@@ -1,6 +1,7 @@
 package builder
 
 import (
+	"errors"
 	"fmt"
 	"path"
 	"strings"
@@ -23,6 +24,8 @@ const (
 const (
 	mergeRequestTarget = "MergeRequest"
 )
+
+var ErrBranchTimeConfilct = errors.New("branch is eclipsed by another branch")
 
 var branches2exclude = []string{"main", "master", "develop"}
 var trackedActions = []string{initCommit, commit, createMergeRequest, acceptMergeRequest}
@@ -49,7 +52,7 @@ func (gb *GitlabBuilder) Build() (storage.Report, error) {
 	}
 
 	// Current time with the server's offset
-	pointOfReference := time.Now().UTC().Add(time.Minute * time.Duration(gb.tzOffset)) // .Add(time.Hour * 24 * -10)
+	pointOfReference := time.Date(2023, 10, 31, 03, 34, 58, 651387237, time.UTC) //time.Now().UTC().Add(time.Minute * time.Duration(gb.tzOffset))
 	// Get start time of the current day
 	timeRangeStart := pointOfReference.Truncate(time.Hour * 24)
 	// Set time range to a whole day
@@ -69,17 +72,17 @@ func (gb *GitlabBuilder) Build() (storage.Report, error) {
 	}
 
 	var filteredEvents []gitlab.Event
-	filteredEvents, err = gb.filterByTime(events, timeRangeStart, timeRangeEnd)
+	filteredEvents, err = filterByTime(events, timeRangeStart, timeRangeEnd)
 	if err != nil {
 		return storage.Report{}, err
 	}
 
-	filteredEvents, err = gb.filterByBranches(filteredEvents)
+	filteredEvents, err = filterByBranches(filteredEvents)
 	if err != nil {
 		return storage.Report{}, err
 	}
 
-	filteredEvents, err = gb.filterByActions(filteredEvents)
+	filteredEvents, err = filterByActions(filteredEvents)
 	if err != nil {
 		return storage.Report{}, err
 	}
@@ -89,108 +92,38 @@ func (gb *GitlabBuilder) Build() (storage.Report, error) {
 		return storage.Report{}, err
 	}
 
-	slices.SortFunc(filteredEvents, func(i, j gitlab.Event) int {
-		return i.CreatedAt.Compare(j.CreatedAt)
-	})
+	sortEvents(filteredEvents)
+	branch2events := groupByBranches(filteredEvents)
 
-	branch2events := gb.groupByBranches(filteredEvents)
-
-	if err != nil {
-		return storage.Report{}, fmt.Errorf("failed to group events by branches: %w", err)
-	}
+	// Get branches ordered by first event time
+	orderedBranches := sortBranches(branch2events)
 
 	var prevTime = filteredEvents[0].CreatedAt
-	prevTime = gb.initPrevTime(branch2events, prevTime)
+	prevTime = initPrevTime(branch2events, prevTime)
 
-	for k, v := range branch2events {
-		row := gb.buildRow(k, v, prevTime)
+	for _, branchName := range orderedBranches {
+		events := branch2events[branchName]
+		row := gb.buildRow(branchName, events, prevTime)
 		result.Rows = append(result.Rows, row)
 
-		// Use time of the last event for the branch 
+		// Use time of the last event for the branch
 		// as a staring point for the next branch
-		prevTime = v[len(v)-1].CreatedAt
-	}
-
-	return result, nil
-}
-
-func (gb *GitlabBuilder) initPrevTime(branch2events map[string][]gitlab.Event, defaultValue time.Time) time.Time {
-	// Only one row in report
-	if len(branch2events) == 1 {
-		for _, events := range branch2events {
-			// A point in time which will be 8 hrs prior to a git action by user
-			fullWorkDay := events[0].CreatedAt.Add(time.Hour * -8)
-
-			// When a single branch contains MR
-			hasMr, _ := gb.tryGetMrForBranch(events)
-			if hasMr {
-				return fullWorkDay
-			}
-
-			// When a single branch has only one commit
-			commitCount := gb.getCommitsCountForBranch(events)
-			if commitCount == 1 {
-				return fullWorkDay
-			}
-
-			// When multiple commits in a single branch
-			return events[0].CreatedAt
-		}
-	}
-
-	return defaultValue
-}
-
-func (gb *GitlabBuilder) filterByTime(events []gitlab.Event, start time.Time, end time.Time) ([]gitlab.Event, error) {
-	result := []gitlab.Event{}
-
-	for _, e := range events {
-		if e.CreatedAt.After(start) && e.CreatedAt.Before(end) {
-			result = append(result, e)
-		}
-	}
-
-	if len(result) == 0 {
-		return nil, ErrNoGitActions
-	}
-
-	return result, nil
-}
-
-func (gb *GitlabBuilder) filterByActions(events []gitlab.Event) ([]gitlab.Event, error) {
-	result := []gitlab.Event{}
-
-	for _, e := range events {
-		if slices.Contains(trackedActions, e.ActionName) {
-			result = append(result, e)
-		}
-	}
-
-	if len(result) == 0 {
-		return nil, ErrNoGitActions
-	}
-
-	return result, nil
-}
-
-func (gb *GitlabBuilder) filterByBranches(events []gitlab.Event) ([]gitlab.Event, error) {
-	result := []gitlab.Event{}
-
-	for _, e := range events {
-		if !slices.Contains(branches2exclude, e.PushData.Ref) {
-			result = append(result, e)
-		}
-	}
-
-	if len(result) == 0 {
-		return nil, ErrNoGitActions
+		prevTime = events[len(events)-1].CreatedAt
 	}
 
 	return result, nil
 }
 
 func (gb *GitlabBuilder) loadMergeRequests(events []gitlab.Event) ([]gitlab.Event, error) {
-	for _, event := range events {
+	loaded := map[int]gitlab.MergeRequest{}
+	for i, event := range events {
+
+		tmr, isLoaded := loaded[event.TargetIid]
+		if isLoaded {
+			events[i].MR = &tmr
+			continue
+		}
+
 		if event.TargetType == mergeRequestTarget {
 			mr, err := gb.client.MergeRequest(event.ProjectId, event.TargetIid, gb.userToken)
 
@@ -198,29 +131,20 @@ func (gb *GitlabBuilder) loadMergeRequests(events []gitlab.Event) ([]gitlab.Even
 				return nil, fmt.Errorf("could not get MR data: %w", err)
 			}
 
-			event.MR = mr
+			events[i].MR = mr
+			loaded[event.TargetIid] = *mr
 		}
 	}
 
 	return events, nil
 }
 
-func (gb *GitlabBuilder) groupByBranches(events []gitlab.Event) map[string][]gitlab.Event {
-	var branch2events = make(map[string][]gitlab.Event)
-
-	for _, event := range events {
-		branchName := event.PushData.Ref
-		branch2events[branchName] = append(branch2events[branchName], event)
-	}
-
-	return branch2events
-}
-
 func (gb *GitlabBuilder) buildRow(branchName string, branchEvents []gitlab.Event, prevTime time.Time) storage.ReportRow {
 	var taskName string
 	var taskLink string
 
-	hasMr, mergeRequest := gb.tryGetMrForBranch(branchEvents)
+	fmt.Println("Building row for:", branchName)
+	hasMr, mergeRequest := tryGetMrForBranch(branchEvents)
 
 	if hasMr {
 		// If a branch has an MR
@@ -239,8 +163,7 @@ func (gb *GitlabBuilder) buildRow(branchName string, branchEvents []gitlab.Event
 		}
 	}
 
-	// Time spend = time of the last event for the branch - previous branch last event time
-	timeSpent := branchEvents[len(branchEvents)-1].CreatedAt.Sub(prevTime).Hours()
+	timeSpent, _ := getTimeDelta(prevTime, branchEvents)
 
 	result := storage.ReportRow{
 		ReportId: 0,
@@ -282,7 +205,155 @@ func (gb *GitlabBuilder) getCommitLinks(branchEvents []gitlab.Event) ([]string, 
 	return result, nil
 }
 
-func (gb *GitlabBuilder) tryGetMrForBranch(branchEvents []gitlab.Event) (bool, *gitlab.MergeRequest) {
+func sortEvents(events []gitlab.Event) []gitlab.Event {
+	slices.SortFunc(events, func(i, j gitlab.Event) int {
+		return i.CreatedAt.Compare(j.CreatedAt)
+	})
+
+	return events
+}
+
+func sortBranches(branch2events map[string][]gitlab.Event) []string {
+	result := make([]string, 0, len(branch2events))
+	time2branch := make(map[time.Time]string, len(branch2events))
+	sortedTime := make([]time.Time, 0, len(branch2events))
+
+	for k, v := range branch2events {
+		tempEvents := sortEvents(v)
+		minTime := tempEvents[0].CreatedAt
+
+		sortedTime = append(sortedTime, minTime)
+		time2branch[minTime] = k
+	}
+
+	slices.SortFunc(sortedTime, func(i, j time.Time) int {
+		return i.Compare(j)
+	})
+
+	for _, t := range sortedTime {
+		result = append(result, time2branch[t])
+	}
+
+	return result
+}
+
+func initPrevTime(branch2events map[string][]gitlab.Event, defaultValue time.Time) time.Time {
+	// Only one row in report
+	if len(branch2events) == 1 {
+		for _, events := range branch2events {
+			// A point in time which will be 8 hrs prior to a git action by user
+			fullWorkDay := events[0].CreatedAt.Add(time.Hour * -8)
+
+			// When a single branch contains MR
+			hasMr, _ := tryGetMrForBranch(events)
+			if hasMr {
+				return fullWorkDay
+			}
+
+			// When a single branch has only one commit
+			commitCount := getCommitsCountForBranch(events)
+			if commitCount == 1 {
+				return fullWorkDay
+			}
+
+			// When multiple commits in a single branch
+			return events[0].CreatedAt
+		}
+	}
+
+	return defaultValue
+}
+
+func filterByTime(events []gitlab.Event, start time.Time, end time.Time) ([]gitlab.Event, error) {
+	result := []gitlab.Event{}
+
+	for _, e := range events {
+		if e.CreatedAt.After(start) && e.CreatedAt.Before(end) {
+			result = append(result, e)
+		}
+	}
+
+	if len(result) == 0 {
+		return nil, ErrNoGitActions
+	}
+
+	return result, nil
+}
+
+func filterByActions(events []gitlab.Event) ([]gitlab.Event, error) {
+	result := []gitlab.Event{}
+
+	for _, e := range events {
+		if slices.Contains(trackedActions, e.ActionName) {
+			result = append(result, e)
+		}
+	}
+
+	if len(result) == 0 {
+		return nil, ErrNoGitActions
+	}
+
+	return result, nil
+}
+
+func filterByBranches(events []gitlab.Event) ([]gitlab.Event, error) {
+	result := []gitlab.Event{}
+
+	for _, e := range events {
+		branchName := e.PushData.Ref
+		if branchName == "" || !slices.Contains(branches2exclude, branchName) {
+			result = append(result, e)
+		}
+	}
+
+	if len(result) == 0 {
+		return nil, ErrNoGitActions
+	}
+
+	return result, nil
+}
+
+func groupByBranches(events []gitlab.Event) map[string][]gitlab.Event {
+	var branch2events = make(map[string][]gitlab.Event)
+
+	for _, event := range events {
+		var branchName string
+		if event.MR != nil {
+			branchName = event.MR.SourceBranch
+		} else {
+			branchName = event.PushData.Ref
+		}
+		branch2events[branchName] = append(branch2events[branchName], event)
+	}
+
+	return branch2events
+}
+
+func getTimeDelta(prevTime time.Time, events []gitlab.Event) (float64, error) {
+	var timeSpent float64
+
+	// If last branch instersects time of current
+	if prevTime.After(events[0].CreatedAt) {
+		// If intersects partially, calculate delta
+		if prevTime.Before(events[len(events)-1].CreatedAt) {
+			return events[len(events)-1].CreatedAt.Sub(prevTime).Hours(), nil
+		} else {
+			return 0, ErrBranchTimeConfilct
+		}
+	}
+
+	if len(events) == 1 {
+		timeSpent = events[0].CreatedAt.Sub(prevTime).Hours()
+	} else {
+		// Time spend = time of the last event for the branch - previous branch last event time
+		//	timeSpent = events[len(events)-1].CreatedAt.Sub(prevTime).Hours()
+		timeSpent = events[len(events)-1].CreatedAt.Sub(events[0].CreatedAt).Hours()
+	}
+
+	return timeSpent, nil
+}
+
+func tryGetMrForBranch(branchEvents []gitlab.Event) (bool, *gitlab.MergeRequest) {
 	for _, event := range branchEvents {
 		if event.MR != nil {
 			return true, event.MR
@@ -292,7 +363,7 @@ func (gb *GitlabBuilder) tryGetMrForBranch(branchEvents []gitlab.Event) (bool, *
 	return false, nil
 }
 
-func (gb *GitlabBuilder) getCommitsCountForBranch(branchEvents []gitlab.Event) int {
+func getCommitsCountForBranch(branchEvents []gitlab.Event) int {
 	result := 0
 	for _, event := range branchEvents {
 		if event.ActionName == initCommit || event.ActionName == commit {

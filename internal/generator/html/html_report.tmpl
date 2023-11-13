@@ -20,7 +20,12 @@
 	<tbody>
 		{{ range $i, $r := . }}
 		<tr id="{{ $i }}">
-			<td class="tg-0lax">{{ $r.Date }}</td>
+			<td class="tg-0lax" id="time-created">
+				<script>
+					var datetime = new Date("{{ $r.Date }}").toLocaleString("ru-RU")
+					document.querySelectorAll('#time-created')[{{$i}}].innerHTML = `<b>${datetime}</b>`
+				</script>
+			</td>
 			<td class="tg-0lax">{{ $r.Task }}</td>
 			<td class="tg-0lax">
 					<a href="{{ $r.Link }}" target='blank'>{{ $r.Link }}</a>
@@ -28,7 +33,10 @@
 			<td class="tg-0lax" id="time-row">
 				<script>
 					var time = Math.round({{ $r.TimeSpent }} * 10) / 10
-					document.querySelectorAll('#time-row')[{{$i}}].innerHTML = time + "ч"
+					var msg = time == 0 
+						? "<p style='color:red;'>Конфликт с другой веткой</p>" 
+						: `<p style='color:green;'>${time} ч</p>`
+					document.querySelectorAll('#time-row')[{{$i}}].innerHTML = msg
 				</script>
 			</td>
 		</tr>
