@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -65,9 +66,23 @@ func main() {
 			// fmt.Println("New USER")
 			// fmt.Println(string(tJson))
 		}
+
+	db, err := sqlite.New("test.sqlite")
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	if err = db.Up(); err != nil {
+		fmt.Println(err)
+	}
+
+	if err = db.Seed(); err != nil {
+		fmt.Println(err)
+	}
 	*/
 
-	const gitHost = "gitlab.com"
+	ctx := context.Background()
+	const gitHost = "localhost:4443"//"gitlab.com"
 	const gitBasePath = "api/v4"
 	const token = "glpat-wEp2SkQS_Yvr7vgDyt7A"
 	const userId = 18375700
@@ -75,7 +90,7 @@ func main() {
 	gitClient := gitlab.New(gitHost, gitBasePath)
 	gBuilder := builder.New(*gitClient, userId, token, 0)
 
-	report, err := gBuilder.Build()
+	report, err := gBuilder.Build(ctx)
 
 	if errors.Is(err, builder.ErrNoGitActions) {
 		fmt.Println("Go work")

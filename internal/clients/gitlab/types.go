@@ -38,11 +38,12 @@ type MergeRequest struct {
 	TargetBranch string `json:"target_branch"`
 	SourceBranch string `json:"source_branch"`
 	WebUrl       string `json:"web_url"`
+	IssueUrl     string `json:"target_title"`
 }
 
 type Commit struct {
-	Id string `json:"id"`
+	Id      string `json:"id"`
 	ShortId string `json:"short_id"`
-	WebUrl string `json:"web_url"`
-	Title string `json:"title"`
+	WebUrl  string `json:"web_url"`
+	Title   string `json:"title"`
 }

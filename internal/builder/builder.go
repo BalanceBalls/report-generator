@@ -1,6 +1,7 @@
 package builder
 
 import (
+	"context"
 	"errors"
 
 	"github.com/BalanceBalls/report-generator/internal/storage"
@@ -9,6 +10,5 @@ import (
 var ErrNoGitActions = errors.New("no gitlab actions to report found for current day")
 
 type Builder interface {
-	Build() (storage.Report, error)
+	Build(ctx context.Context) (storage.Report, error)
 }
-

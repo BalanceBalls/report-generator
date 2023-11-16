@@ -1,6 +1,7 @@
 package gitlab
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -8,6 +9,7 @@ import (
 	"net/url"
 	"path"
 	"strconv"
+	"time"
 )
 
 const tokenHeaderKey = "PRIVATE-TOKEN"
@@ -18,6 +20,11 @@ type GitlabClient struct {
 	client   http.Client
 }
 
+type EventsResponse struct {
+	Events []Event
+	Err    error
+}
+
 func New(host string, basePath string) *GitlabClient {
 	return &GitlabClient{
 		host:     host,
@@ -26,7 +33,10 @@ func New(host string, basePath string) *GitlabClient {
 	}
 }
 
-func (gc *GitlabClient) Events(req EventsReq) ([]Event, error) {
+func (gc *GitlabClient) Events(ctx context.Context, req EventsReq, eventsResp chan EventsResponse) {
+	ctx, cancel := context.WithTimeout(ctx, time.Second*1)
+	defer cancel()
+
 	path := path.Join("users", strconv.Itoa(req.UserId), "events")
 
 	params := url.Values{}
@@ -39,25 +49,25 @@ func (gc *GitlabClient) Events(req EventsReq) ([]Event, error) {
 		params.Add("before", req.Before.String())
 	}
 
-	res, err := gc.doRequest(path, params, req.UserToken)
+	eventsData, err := gc.doRequest(ctx, path, params, req.UserToken)
 
 	if err != nil {
-		return nil, fmt.Errorf("Events get request failed: %w", err)
+		eventsResp <- EventsResponse{nil, fmt.Errorf("Events get request failed: %w", err)}
 	}
 
 	var resData []Event
 
-	if err = json.Unmarshal(res, &resData); err != nil {
-		return nil, fmt.Errorf("Could not parse response data: %w", err)
+	if err = json.Unmarshal(eventsData, &resData); err != nil {
+		eventsResp <- EventsResponse{nil, fmt.Errorf("Could not parse response data: %w", err)}
 	}
-
-	return resData, nil
+	eventsResp <- EventsResponse{resData, nil}
 }
 
 func (gc *GitlabClient) MergeRequest(projectId int, mrId int, token string) (*MergeRequest, error) {
+	ctx := context.TODO()
 	path := path.Join("projects", strconv.Itoa(projectId), "merge_requests", strconv.Itoa(mrId))
 
-	res, err := gc.doRequest(path, nil, token)
+	res, err := gc.doRequest(ctx, path, nil, token)
 
 	if err != nil {
 		return nil, fmt.Errorf("MergeRequest get request failed: %w", err)
@@ -72,9 +82,10 @@ func (gc *GitlabClient) MergeRequest(projectId int, mrId int, token string) (*Me
 }
 
 func (gc *GitlabClient) Commit(projectId int, cHash string, token string) (*Commit, error) {
+	ctx := context.TODO()
 	path := path.Join("projects", strconv.Itoa(projectId), "repository", "commits", cHash)
 
-	res, err := gc.doRequest(path, nil, token)
+	res, err := gc.doRequest(ctx, path, nil, token)
 
 	if err != nil {
 		return nil, fmt.Errorf("Commit get request failed: %w", err)
@@ -88,14 +99,14 @@ func (gc *GitlabClient) Commit(projectId int, cHash string, token string) (*Comm
 	return &resData, nil
 }
 
-func (gc *GitlabClient) doRequest(endpointPath string, params url.Values, token string) ([]byte, error) {
+func (gc *GitlabClient) doRequest(ctx context.Context, endpointPath string, params url.Values, token string) ([]byte, error) {
 	u := url.URL{
 		Scheme: "https",
 		Host:   gc.host,
 		Path:   path.Join(gc.basePath, endpointPath),
 	}
 
-	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	req.Header.Set(tokenHeaderKey, token)
 
 	if err != nil {
