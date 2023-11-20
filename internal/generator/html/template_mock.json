@@ -1,0 +1,24 @@
+[
+  {
+    "rowReportId": 0,
+    "date": "2023-10-05T17:48:36.053+03:00",
+    "task": "casino23/tickets#2294",
+    "link": "https://casino.org/casino23/-/merge_requests/808 \n https://casino.org/casino23/-/merge_requests/809 \n https://casino.org/casino23/-/merge_requests/810 \n https://casino.lab.com/bb/test2/-/commit/ddc936fc841b05577f843c1a2d878a2f3bc58e38 \n https://casino.lab.com/bb/test2/-/commit/5ebb815c45d9f9e675ba65ab0a18f7e373bab926 \n https://casino.lab.com/bb/test2/-/commit/ddeec3f27a7417dc40460d14d0cd1e78a9a7b462 \n https://casino.lab.com/bb/test2/-/commit/2a041350ace6517f1f7407b70286c5ee06b16ab2 \n https://casino.lab.com/bb/test2/-/commit/494979cb20158e203f1acff9a10cbeba1aa26816",
+    "timeSpent": 5.397542
+  },
+  {
+    "rowReportId": 0,
+    "date": "2023-10-05T18:10:57.745+03:00",
+    "task": "https://git.casinomodule.org/casino23/tickets/-/issues/2223",
+    "link": "https://casino.org/casino23/-/merge_requests/443 \n https://casino.lab.com/bb/test2/-/commit/e22024c9ace5375af7870ad55bb0809e5843e8ee",
+    "timeSpent": 0
+  },
+  {
+    "rowReportId": 0,
+    "date": "2023-10-05T23:29:43.563+03:00",
+    "task": "release/v1.52.1",
+    "link": "https://casino.org/casino23/-/merge_requests/811 \n https://casino.lab.com/bb/test2/-/commit/494979cb20158e203f1acff9a10cbeba1aa26816",
+    "timeSpent": 0.03230028
+  }
+]
+
