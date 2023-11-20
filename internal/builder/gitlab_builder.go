@@ -29,10 +29,10 @@ var branches2exclude = []string{"main", "master", "develop"}
 var trackedActions = []string{initCommit, commit, createMergeRequest, acceptMergeRequest}
 
 type GitlabBuilder struct {
-	client    gitlab.GitlabClient
-	userId    int
-	userToken string
-	tzOffset  int
+	client     gitlab.GitlabClient
+	userId     int
+	userToken  string
+	tzOffset   int
 }
 
 func New(client gitlab.GitlabClient, userId int, userToken string, tz int) *GitlabBuilder {
@@ -44,15 +44,12 @@ func New(client gitlab.GitlabClient, userId int, userToken string, tz int) *Gitl
 	}
 }
 
-func (gb *GitlabBuilder) Build(ctx context.Context) (storage.Report, error) {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	timeReport, err := gb.build(ctx)
-	return timeReport, err
+type BuildResult struct {
+	Report storage.Report
+	Err    error
 }
 
-func (gb *GitlabBuilder) build(ctx context.Context) (storage.Report, error) {
+func (gb *GitlabBuilder) Build(ctx context.Context, respch chan BuildResult) {
 	result := storage.Report{
 		UserId: gb.userId,
 	}
@@ -71,41 +68,21 @@ func (gb *GitlabBuilder) build(ctx context.Context) (storage.Report, error) {
 		UserToken: gb.userToken,
 	}
 
-	respch := make(chan gitlab.EventsResponse)
-	go gb.client.Events(ctx, eventsReq, respch)
-
-	var events []gitlab.Event
-
-	select {
-	case <-ctx.Done():
-		return storage.Report{}, fmt.Errorf("Events request timed out")
-	case resp := <-respch:
-		if resp.Err != nil {
-			return storage.Report{}, fmt.Errorf("failed to fetch gitlab data: %w", resp.Err)
-		}
-		events = resp.Events
-	}
+	events, err := gb.client.Events(ctx, eventsReq)
+	handleErr(err, respch)
 
 	var filteredEvents []gitlab.Event
-	filteredEvents, err := filterByTime(events, timeRangeStart, timeRangeEnd)
-	if err != nil {
-		return storage.Report{}, err
-	}
+	filteredEvents, err = filterByTime(events, timeRangeStart, timeRangeEnd)
+	handleErr(err, respch)
 
 	filteredEvents, err = filterByBranches(filteredEvents)
-	if err != nil {
-		return storage.Report{}, err
-	}
+	handleErr(err, respch)
 
 	filteredEvents, err = filterByActions(filteredEvents)
-	if err != nil {
-		return storage.Report{}, err
-	}
+	handleErr(err, respch)
 
-	filteredEvents, err = gb.loadMergeRequests(filteredEvents)
-	if err != nil {
-		return storage.Report{}, err
-	}
+	filteredEvents, err = gb.loadMergeRequests(ctx, filteredEvents)
+	handleErr(err, respch)
 
 	sortEvents(filteredEvents)
 	branch2events := groupByBranches(filteredEvents)
@@ -118,7 +95,7 @@ func (gb *GitlabBuilder) build(ctx context.Context) (storage.Report, error) {
 
 	for _, branchName := range orderedBranches {
 		events := branch2events[branchName]
-		row := gb.buildRow(branchName, events, prevTime)
+		row := gb.buildRow(ctx, branchName, events, prevTime)
 		result.Rows = append(result.Rows, row)
 
 		// Use time of the last event for the branch
@@ -126,10 +103,13 @@ func (gb *GitlabBuilder) build(ctx context.Context) (storage.Report, error) {
 		prevTime = events[len(events)-1].CreatedAt
 	}
 
-	return result, nil
+	respch <- BuildResult{
+		Report: result,
+		Err: nil,
+	}
 }
 
-func (gb *GitlabBuilder) loadMergeRequests(events []gitlab.Event) ([]gitlab.Event, error) {
+func (gb *GitlabBuilder) loadMergeRequests(ctx context.Context, events []gitlab.Event) ([]gitlab.Event, error) {
 	loaded := map[int]gitlab.MergeRequest{}
 	for i, event := range events {
 
@@ -140,7 +120,7 @@ func (gb *GitlabBuilder) loadMergeRequests(events []gitlab.Event) ([]gitlab.Even
 		}
 
 		if event.TargetType == mergeRequestTarget {
-			mr, err := gb.client.MergeRequest(event.ProjectId, event.TargetIid, gb.userToken)
+			mr, err := gb.client.MergeRequest(ctx, event.ProjectId, event.TargetIid, gb.userToken)
 
 			if err != nil {
 				return nil, fmt.Errorf("could not get MR data: %w", err)
@@ -154,7 +134,7 @@ func (gb *GitlabBuilder) loadMergeRequests(events []gitlab.Event) ([]gitlab.Even
 	return events, nil
 }
 
-func (gb *GitlabBuilder) buildRow(branchName string, branchEvents []gitlab.Event, prevTime time.Time) storage.ReportRow {
+func (gb *GitlabBuilder) buildRow(ctx context.Context, branchName string, branchEvents []gitlab.Event, prevTime time.Time) storage.ReportRow {
 	var taskName string
 	var taskLink string
 	var actionLinks []string
@@ -172,7 +152,7 @@ func (gb *GitlabBuilder) buildRow(branchName string, branchEvents []gitlab.Event
 		taskName = branchEvents[0].PushData.Ref
 	}
 
-	commitLinks, err := gb.getCommitLinks(branchEvents)
+	commitLinks, err := gb.getCommitLinks(ctx, branchEvents)
 	if err != nil {
 		taskLink = "Failed to get commits"
 	} else {
@@ -196,7 +176,7 @@ func (gb *GitlabBuilder) buildRow(branchName string, branchEvents []gitlab.Event
 	return result
 }
 
-func (gb *GitlabBuilder) getCommitLinks(branchEvents []gitlab.Event) ([]string, error) {
+func (gb *GitlabBuilder) getCommitLinks(ctx context.Context, branchEvents []gitlab.Event) ([]string, error) {
 	var result []string
 
 	var firstCommit gitlab.Event
@@ -211,6 +191,7 @@ func (gb *GitlabBuilder) getCommitLinks(branchEvents []gitlab.Event) ([]string, 
 	// Get info about any single commit in order to
 	// acquire base commit URL which will be used for other commits
 	commitInfo, err := gb.client.Commit(
+		ctx,
 		firstCommit.ProjectId,
 		firstCommit.PushData.CommitTo,
 		gb.userToken)
@@ -420,4 +401,13 @@ func getCommitsCountForBranch(branchEvents []gitlab.Event) int {
 	}
 
 	return result
+}
+
+func handleErr(err error, respch chan BuildResult) {
+	if err != nil {
+		respch <- BuildResult{
+			Report: storage.Report{},
+			Err: err,
+		}
+	}
 }

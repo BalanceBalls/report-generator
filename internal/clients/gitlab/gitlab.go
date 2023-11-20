@@ -9,15 +9,14 @@ import (
 	"net/url"
 	"path"
 	"strconv"
-	"time"
 )
 
 const tokenHeaderKey = "PRIVATE-TOKEN"
 
 type GitlabClient struct {
-	host     string
-	basePath string
-	client   http.Client
+	host       string
+	basePath   string
+	client     http.Client
 }
 
 type EventsResponse struct {
@@ -27,18 +26,14 @@ type EventsResponse struct {
 
 func New(host string, basePath string) *GitlabClient {
 	return &GitlabClient{
-		host:     host,
-		basePath: basePath,
-		client:   http.Client{},
+		host:       host,
+		basePath:   basePath,
+		client:     http.Client{},
 	}
 }
 
-func (gc *GitlabClient) Events(ctx context.Context, req EventsReq, eventsResp chan EventsResponse) {
-	ctx, cancel := context.WithTimeout(ctx, time.Second*1)
-	defer cancel()
-
+func (gc *GitlabClient) Events(ctx context.Context, req EventsReq) ([]Event, error) {
 	path := path.Join("users", strconv.Itoa(req.UserId), "events")
-
 	params := url.Values{}
 
 	if !req.After.IsZero() {
@@ -52,19 +47,18 @@ func (gc *GitlabClient) Events(ctx context.Context, req EventsReq, eventsResp ch
 	eventsData, err := gc.doRequest(ctx, path, params, req.UserToken)
 
 	if err != nil {
-		eventsResp <- EventsResponse{nil, fmt.Errorf("Events get request failed: %w", err)}
+		return nil, fmt.Errorf("Events get request failed: %w", err)
 	}
 
 	var resData []Event
 
 	if err = json.Unmarshal(eventsData, &resData); err != nil {
-		eventsResp <- EventsResponse{nil, fmt.Errorf("Could not parse response data: %w", err)}
+		return nil, fmt.Errorf("Could not parse response data: %w", err)
 	}
-	eventsResp <- EventsResponse{resData, nil}
+	return resData, nil
 }
 
-func (gc *GitlabClient) MergeRequest(projectId int, mrId int, token string) (*MergeRequest, error) {
-	ctx := context.TODO()
+func (gc *GitlabClient) MergeRequest(ctx context.Context, projectId int, mrId int, token string) (*MergeRequest, error) {
 	path := path.Join("projects", strconv.Itoa(projectId), "merge_requests", strconv.Itoa(mrId))
 
 	res, err := gc.doRequest(ctx, path, nil, token)
@@ -81,8 +75,7 @@ func (gc *GitlabClient) MergeRequest(projectId int, mrId int, token string) (*Me
 	return &resData, nil
 }
 
-func (gc *GitlabClient) Commit(projectId int, cHash string, token string) (*Commit, error) {
-	ctx := context.TODO()
+func (gc *GitlabClient) Commit(ctx context.Context, projectId int, cHash string, token string) (*Commit, error) {
 	path := path.Join("projects", strconv.Itoa(projectId), "repository", "commits", cHash)
 
 	res, err := gc.doRequest(ctx, path, nil, token)
