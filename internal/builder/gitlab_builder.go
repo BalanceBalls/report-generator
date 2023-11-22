@@ -30,12 +30,12 @@ var trackedActions = []string{initCommit, commit, createMergeRequest, acceptMerg
 
 type GitlabBuilder struct {
 	client     gitlab.GitlabClient
-	userId     int
+	userId     int64
 	userToken  string
 	tzOffset   int
 }
 
-func New(client gitlab.GitlabClient, userId int, userToken string, tz int) *GitlabBuilder {
+func New(client gitlab.GitlabClient, userId int64, userToken string, tz int) *GitlabBuilder {
 	return &GitlabBuilder{
 		client:    client,
 		userId:    userId,

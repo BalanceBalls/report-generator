@@ -1,8 +1,11 @@
 package sqlite
 
 import (
+	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -15,6 +18,7 @@ type SqliteStorage struct {
 }
 
 func New(name string) (*SqliteStorage, error) {
+	log.Printf("Initializing DB '%s'", name)
 	db, err := sql.Open("sqlite3", name)
 
 	if err != nil {
@@ -28,8 +32,8 @@ func New(name string) (*SqliteStorage, error) {
 	return &SqliteStorage{db: db}, nil
 }
 
-func (s *SqliteStorage) Up() error {
-	_, err := s.db.Exec(createUsersTable)
+func (s *SqliteStorage) Up(ctx context.Context) error {
+	_, err := s.db.ExecContext(ctx, createUsersTable)
 	if err != nil {
 		return fmt.Errorf("could not create table users: %w", err)
 	}
@@ -47,7 +51,38 @@ func (s *SqliteStorage) Up() error {
 	return nil
 }
 
-func (s *SqliteStorage) User(userId int) (*storage.User, error) {
+func (s *SqliteStorage) AddUser(ctx context.Context, user storage.User) error {
+	_, err := s.db.Exec(addUser, user.Id, user.UserEmail, user.UserToken, user.TimezoneOffset, user.IsActive)
+	if err != nil {
+		return fmt.Errorf("could not add new user: %w", err)
+	}
+
+	return nil
+}
+
+func (s *SqliteStorage) UserExists(ctx context.Context, userId int64) bool {
+	q, err := s.db.Prepare(checkUserExists)
+
+	if err != nil {
+		log.Printf("failed to build query checkUserExists")
+		return false
+	}
+
+	var exists int
+	err = q.QueryRowContext(ctx, userId).Scan(&exists)
+
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false
+		}
+
+		log.Print(err)
+	}
+
+	return true
+}
+
+func (s *SqliteStorage) User(ctx context.Context, userId int64) (*storage.User, error) {
 	q, err := s.db.Prepare(getUserById)
 
 	if err != nil {
@@ -55,17 +90,39 @@ func (s *SqliteStorage) User(userId int) (*storage.User, error) {
 	}
 
 	user := &storage.User{}
-	err = q.QueryRow(userId).Scan(&user.Id, &user.UserEmail, &user.UserToken, &user.IsActive)
+	err = q.QueryRowContext(ctx, userId).Scan(&user.Id, &user.UserEmail, &user.UserToken, &user.IsActive)
 
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, storage.ErrUserNotFound
+		}
+
 		return nil, fmt.Errorf("failed to fetch row: %w", err)
 	}
 
 	return user, nil
 }
 
-func (s *SqliteStorage) Users() ([]storage.FlatUser, error) {
-	rows, err := s.db.Query(getFullUsers, 10, 0)
+func (s *SqliteStorage) UpdateUser(ctx context.Context, user storage.User) error {
+	_, err := s.db.Exec(updateUser, user.UserEmail, user.UserToken, user.TimezoneOffset, user.Id)
+	if err != nil {
+		return fmt.Errorf("could not update user: %w", err)
+	}
+
+	return nil
+}
+
+func (s *SqliteStorage) RemoveUser(ctx context.Context, userId int64) error {
+	_, err := s.db.Exec(removeUser, userId)
+	if err != nil {
+		return fmt.Errorf("could not remove user: %w", err)
+	}
+
+	return nil
+}
+
+func (s *SqliteStorage) Users(ctx context.Context) ([]storage.FlatUser, error) {
+	rows, err := s.db.QueryContext(ctx, getFullUsers, 10, 0)
 
 	if err != nil {
 		return []storage.FlatUser{}, fmt.Errorf("failed to fetch rows: %w", err)

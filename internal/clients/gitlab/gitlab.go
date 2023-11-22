@@ -33,7 +33,7 @@ func New(host string, basePath string) *GitlabClient {
 }
 
 func (gc *GitlabClient) Events(ctx context.Context, req EventsReq) ([]Event, error) {
-	path := path.Join("users", strconv.Itoa(req.UserId), "events")
+	path := path.Join("users", fmt.Sprint(req.UserId), "events")
 	params := url.Values{}
 
 	if !req.After.IsZero() {

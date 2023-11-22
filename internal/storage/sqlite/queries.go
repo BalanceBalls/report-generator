@@ -46,4 +46,27 @@ SELECT
 FROM users 
 WHERE id = ?
   `
+
+	addUser = `
+INSERT INTO users (id, user_email, user_token, timezone_offset, is_active) 
+VALUES (?, ?, ?, ?, ?)
+	`
+
+	updateUser = `
+UPDATE users SET 
+	user_email = ?,
+	user_token = ?,
+	timezone_offset = ?
+WHERE id = ?
+	`
+
+	removeUser = `
+DELETE FROM users
+WHERE id = ?
+	`
+
+  checkUserExists = `
+SELECT 1 FROM users
+WHERE id = ?
+	`
 )

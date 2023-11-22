@@ -1,22 +1,24 @@
 package storage
 
 import (
+	"context"
 	"time"
 )
 
 type Storage interface {
-	Report(userId string) (*Report, error)
-	SaveReport(userId string, report *Report) error
-	Users() ([]FlatUser, error)
-	User(userId string) (*User, error)
-	SaveUser(user *User) error
-}
+	Users(ctx context.Context) ([]FlatUser, error)
+	User(ctx context.Context, userId int64) (*User, error)
+	AddUser(ctx context.Context, user User) error
+	UserExists(ctx context.Context, userId int64) bool
+	UpdateUser(ctx context.Context, user User) error
+	RemoveUser(ctx context.Context, userId int64) error
+} 
 
 type User struct {
-	Id             int      `json:"id"`
-	UserEmail      string   `json:"userEmail"`
-	UserToken      string   `json:"userToken"`
-	IsActive       bool     `json:"isActive"`
+	Id        int64  `json:"id"`
+	UserEmail string `json:"userEmail"`
+	UserToken string `json:"userToken"`
+	IsActive  bool   `json:"isActive"`
 
 	// Minutes from UTC
 	TimezoneOffset int      `json:"timezoneOffset"`
@@ -24,13 +26,13 @@ type User struct {
 }
 
 type Report struct {
-	Id     int         `json:"reportId"`
-	UserId int         `json:"reportUserId"`
+	Id     int64       `json:"reportId"`
+	UserId int64       `json:"reportUserId"`
 	Rows   []ReportRow `json:"rows"`
 }
 
 type ReportRow struct {
-	ReportId  int       `json:"rowReportId"`
+	ReportId  int64     `json:"rowReportId"`
 	Date      time.Time `json:"date"`
 	Task      string    `json:"task"`
 	Link      string    `json:"link"`
@@ -38,14 +40,14 @@ type ReportRow struct {
 }
 
 type FlatUser struct {
-	Id             int
+	Id             int64
 	UserEmail      string
 	UserToken      string
 	TimezoneOffset int
 	IsActive       bool
-	ReportId       int
-	UserId         int
-	ReportRowId    int
+	ReportId       int64
+	UserId         int64
+	ReportRowId    int64
 	Date           time.Time
 	Task           string
 	Link           string
@@ -59,10 +61,10 @@ type ConvertableUsers struct {
 func (cu *ConvertableUsers) Convert() []User {
 	var result []User
 
-	flatUserMap := make(map[[2]int][]FlatUser)
+	flatUserMap := make(map[[2]int64][]FlatUser)
 
 	for _, flatUser := range cu.Users {
-		k := [2]int{flatUser.Id, flatUser.ReportId}
+		k := [2]int64{flatUser.Id, flatUser.ReportId}
 		flatUserMap[k] = append(flatUserMap[k], flatUser)
 	}
 

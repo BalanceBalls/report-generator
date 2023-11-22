@@ -7,7 +7,7 @@ import (
 type EventsReq struct {
 	Before    time.Time
 	After     time.Time
-	UserId    int
+	UserId    int64
 	UserToken string
 }
 
