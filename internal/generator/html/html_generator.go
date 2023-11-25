@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"html/template"
 	"io/fs"
+	"log"
 	"os"
 	"path/filepath"
 	"time"
@@ -25,57 +26,53 @@ var tpls embed.FS
 
 const pathToBin = "./bin/"
 
-func New(reportsDir string, tmplName string, saveTooDisk bool) *HtmlGenerator {
+func New(reportsDir string, tmplName string, saveToDisk bool) *HtmlGenerator {
 	return &HtmlGenerator{
 		reportsDir: reportsDir,
 		tmplName:   tmplName,
+		saveToDisk: saveToDisk,
 	}
 }
 
 func (g *HtmlGenerator) Generate(data report.Report) (report.Result, error) {
-	fmt.Println("starting report generation")
+	log.Print("starting report generation")
 
 	tmpl, err := template.ParseFS(tpls, g.tmplName)
 	if err != nil {
-		return report.Result{}, fmt.Errorf(
-			"failed to parse template file for html report: %w", err)
+		return report.Result{}, err
 	}
 	var reportData bytes.Buffer
 	if err := tmpl.ExecuteTemplate(&reportData, g.tmplName, data.Rows); err != nil {
-		return report.Result{}, fmt.Errorf(
-			"failed to generate an html report: %w", err)
+		return report.Result{}, err
 	}
 
+	reportName := fmt.Sprintf("%d_%d.html", data.UserId, time.Now().UnixMilli())
 	reportBytes := reportData.Bytes()
 
 	if g.saveToDisk {
-		path := createReportPath(data.Id, g.reportsDir)
+		path := createReportPath(data.Id, g.reportsDir, reportName)
 		if err = createDirIfNotExist(g.reportsDir); err != nil {
-			return report.Result{}, fmt.Errorf(
-				"failed to create reports folder: %w", err)
+			return report.Result{}, err
 		}
 
 		file, err := createFileIfNotExist(path)
 		if err != nil {
-			return report.Result{}, fmt.Errorf(
-				"failed to create html file for report: %w", err)
+			return report.Result{}, err
 		}
 
 		_, err = file.Write(reportBytes)
 
 		if err != nil {
-			return report.Result{}, fmt.Errorf(
-				"failed to save report into file: %w", err)
+			return report.Result{}, err
 		}
 
 		if err = file.Close(); err != nil {
-			return report.Result{}, fmt.Errorf(
-				"failed to close html file: %w", err)
+			return report.Result{}, err
 		}
 	}
 
 	return report.Result{
-		Name: fmt.Sprint(data.UserId) + "_" + fmt.Sprint(time.Now().UnixMilli()) + ".html",
+		Name: reportName, 
 		Data: reportData.Bytes(),
 	}, nil
 }
@@ -107,8 +104,7 @@ func createFileIfNotExist(path string) (*os.File, error) {
 	return nil, errors.New("file already exists: " + path)
 }
 
-func createReportPath(id int64, reportsDir string) string {
-	fileName := "report-" + fmt.Sprint(id) + ".html"
+func createReportPath(id int64, reportsDir string, fileName string) string {
 	path := filepath.Join(pathToBin, reportsDir, fileName)
 	return path
 }

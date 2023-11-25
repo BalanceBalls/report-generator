@@ -150,6 +150,7 @@ func (b *ReportsBot) handleReportGeneration(ctx context.Context, userId int64, c
 
 	ctx = context.WithValue(ctx, "userId", user.Id)
 	ctx = context.WithValue(ctx, "token", user.UserToken)
+	ctx = context.WithValue(ctx, "tzOffset", user.TimezoneOffset)
 
 	respch := make(chan report.Channel)
 	go b.builder.Build(ctx, respch)

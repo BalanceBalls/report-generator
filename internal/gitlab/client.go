@@ -14,12 +14,6 @@ import (
 )
 const tokenHeaderKey = "PRIVATE-TOKEN"
 
-// Context keys
-const (
-	tokenCtxKey    = "token"
-	userCtxKey     = "userId"
-)
-
 type GitlabClient struct {
 	host     string
 	basePath string

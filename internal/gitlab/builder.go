@@ -43,6 +43,9 @@ func (gb *GitlabBuilder) Build(ctx context.Context, respch chan report.Channel) 
 		UserId: ctx.Value(userCtxKey).(int64),
 	}
 
+	tzOffset := ctx.Value(tzOffsetCtxKey).(int)
+	log.Print(tzOffset)
+
 	// Current time with the server's offset
 	pointOfReference := time.Date(2023, 10, 05, 03, 34, 58, 651387237, time.UTC) //time.Now().UTC().Add(time.Minute * time.Duration(gb.tzOffset))
 	// Get start time of the current day
