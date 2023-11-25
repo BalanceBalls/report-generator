@@ -10,6 +10,7 @@ import (
 
 	_ "github.com/mattn/go-sqlite3"
 
+	"github.com/BalanceBalls/report-generator/internal/report"
 	"github.com/BalanceBalls/report-generator/internal/storage"
 )
 
@@ -51,7 +52,7 @@ func (s *SqliteStorage) Up(ctx context.Context) error {
 	return nil
 }
 
-func (s *SqliteStorage) AddUser(ctx context.Context, user storage.User) error {
+func (s *SqliteStorage) AddUser(ctx context.Context, user report.User) error {
 	_, err := s.db.Exec(addUser, user.Id, user.UserEmail, user.UserToken, user.TimezoneOffset, user.IsActive)
 	if err != nil {
 		return fmt.Errorf("could not add new user: %w", err)
@@ -82,14 +83,14 @@ func (s *SqliteStorage) UserExists(ctx context.Context, userId int64) bool {
 	return true
 }
 
-func (s *SqliteStorage) User(ctx context.Context, userId int64) (*storage.User, error) {
+func (s *SqliteStorage) User(ctx context.Context, userId int64) (*report.User, error) {
 	q, err := s.db.Prepare(getUserById)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to build query: %w", err)
 	}
 
-	user := &storage.User{}
+	user := &report.User{}
 	err = q.QueryRowContext(ctx, userId).Scan(&user.Id, &user.UserEmail, &user.UserToken, &user.IsActive)
 
 	if err != nil {
@@ -103,7 +104,7 @@ func (s *SqliteStorage) User(ctx context.Context, userId int64) (*storage.User, 
 	return user, nil
 }
 
-func (s *SqliteStorage) UpdateUser(ctx context.Context, user storage.User) error {
+func (s *SqliteStorage) UpdateUser(ctx context.Context, user report.User) error {
 	_, err := s.db.Exec(updateUser, user.UserEmail, user.UserToken, user.TimezoneOffset, user.Id)
 	if err != nil {
 		return fmt.Errorf("could not update user: %w", err)

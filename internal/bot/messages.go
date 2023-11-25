@@ -23,12 +23,14 @@ const helpMsg = `
 
 // replies
 const (
-	userNotRegisteredMsg     = "Ошибка: пользователь не зарегестрирован. Для регистрации воспользуйтесь командой /reg"
-	userAlreadyRegisteredMsg = "Ошибка: пользователь уже зарегистрирован"
-	userDataUpdateErrorMsg   = "Ошибка при обновлении данных пользователя"
-	userRegistrationErrorMsg = "Ошибка при добавлении пользователя"
-	tokenHasBeenSavedMsg     = "Токен успешно сохранен"
-	userHasBeenRemovedMsg    = "Аккаунт успешно удален"
-	userHasBeenRegisteredMsg = "Пользователь успешно зарегестрирован. Необходимо обновить gitlab токен. Используйте /help для справки"
-	timezoneHasBeenSavedMsg  = "Часовой пояс успешно сохранен"
+	userNotRegisteredMsg      = "Ошибка: пользователь не зарегестрирован. Для регистрации воспользуйтесь командой /reg"
+	userAlreadyRegisteredMsg  = "Ошибка: пользователь уже зарегистрирован"
+	userDataUpdateErrorMsg    = "Ошибка при обновлении данных пользователя"
+	userRegistrationErrorMsg  = "Ошибка при добавлении пользователя"
+	reportGenerationFailedMsg = "Ошибка при создании отчета"
+	tokenHasBeenSavedMsg      = "Токен успешно сохранен"
+	userHasBeenRemovedMsg     = "Аккаунт успешно удален"
+	userHasBeenRegisteredMsg  = "Пользователь успешно зарегестрирован. Необходимо обновить gitlab токен. Используйте /help для справки"
+	timezoneHasBeenSavedMsg   = "Часовой пояс успешно сохранен"
+	reportInProgressMsg       = "Отчет генерируется..."
 )

@@ -7,10 +7,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/BalanceBalls/report-generator/internal/builder"
-	"github.com/BalanceBalls/report-generator/internal/clients/gitlab"
-	"github.com/BalanceBalls/report-generator/internal/generator"
 	htmlgenerator "github.com/BalanceBalls/report-generator/internal/generator/html"
+	"github.com/BalanceBalls/report-generator/internal/gitlab"
+	"github.com/BalanceBalls/report-generator/internal/report"
 	"github.com/BalanceBalls/report-generator/internal/storage"
 	"github.com/BalanceBalls/report-generator/internal/storage/sqlite"
 	tg "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -19,9 +18,9 @@ import (
 type ReportsBot struct {
 	Bot tg.BotAPI
 
-	storage   storage.Storage
-	generator generator.Generator
-	gitClient gitlab.GitlabClient
+	storage   Storage
+	builder   Builder
+	generator Generator
 }
 
 const empty = ""
@@ -56,14 +55,15 @@ func New(token string) *ReportsBot {
 
 	gitHost := "localhost:4443"
 	gitBasePath := "api/v4"
-	gitlabClient := gitlab.New(gitHost, gitBasePath)
+	gitlabClient := gitlab.NewClient(gitHost, gitBasePath)
+	reportBuilder := gitlab.NewReportBuilder(*gitlabClient)
 
 	return &ReportsBot{
 		Bot: *bot,
 
 		storage:   sqlite,
 		generator: html,
-		gitClient: *gitlabClient,
+		builder:   reportBuilder,
 	}
 }
 
@@ -113,47 +113,71 @@ func (b *ReportsBot) Serve(ctx context.Context) {
 		// Extract the command from the Message.
 		switch update.Message.Command() {
 		case startCmd:
+			log.Printf("start cmd reveived from %d", userId)
 			b.sendText(helloMsg, chatId)
 		case helpCmd:
+			log.Printf("help cmd reveived from %d", userId)
 			b.sendText(helpMsg, chatId)
 		case regCmd:
-			b.handleRegistration(ctx, userId, chatId)
+			log.Printf("reg cmd reveived from %d", userId)
+			go b.handleRegistration(ctx, userId, chatId)
 		case unregCmd:
-			b.handleUnregistration(ctx, userId, chatId)
+			log.Printf("unreg cmd reveived from %d", userId)
+			go b.handleUnregistration(ctx, userId, chatId)
 		case genDayCmd:
-			user, err := b.storage.User(ctx, userId)
-
-			if err != nil {
-				log.Print(err)
-			}
-
-			reportBuilder := builder.New(b.gitClient, user.Id, user.UserToken, user.TimezoneOffset)
-			respch := make(chan builder.BuildResult)
-			go reportBuilder.Build(ctx, respch)
-
-			select {
-			case <-ctx.Done():
-				log.Print(ctx.Err())
-			case reportData := <-respch:
-				reportBytes, err := b.generator.Generate(reportData.Report)
-				if err != nil {
-					log.Print(err)
-					continue
-				}
-
-				file := tg.FileBytes{
-					Name:  reportBytes.Name,
-					Bytes: reportBytes.Data,
-				}
-				
-				msg := tg.NewDocument(chatId, file)
-				msg.Caption = "Отчет за сегодняшний день"
-				b.Bot.Send(msg)
-			}
-			b.sendText("Репорты пока в разработке", chatId)
+			log.Printf("genDay cmd reveived from %d", userId)
+			go b.handleReportGeneration(ctx, userId, chatId)
 		default:
 			log.Print("command was not recognized:", update.Message.Command())
 		}
+	}
+}
+
+func (b *ReportsBot) handleReportGeneration(ctx context.Context, userId int64, chatId int64) {
+	user, err := b.storage.User(ctx, userId)
+
+	if err != nil {
+		log.Print(err)
+		if errors.Is(err, storage.ErrUserNotFound) {
+			b.sendText(userNotRegisteredMsg, chatId)
+			return
+		}
+		b.sendText(reportGenerationFailedMsg, chatId)
+		return
+	}
+
+	b.sendText(reportInProgressMsg, chatId)
+
+	ctx = context.WithValue(ctx, "userId", user.Id)
+	ctx = context.WithValue(ctx, "token", user.UserToken)
+
+	respch := make(chan report.Channel)
+	go b.builder.Build(ctx, respch)
+
+	select {
+	case <-ctx.Done():
+		log.Print(ctx.Err())
+	case reportData := <-respch:
+		if reportData.Err != nil {
+			log.Print(reportData.Err)
+			b.sendText(reportGenerationFailedMsg, chatId)
+			return
+		}
+
+		reportBytes, err := b.generator.Generate(reportData.Report)
+		if err != nil {
+			log.Print(err)
+			return
+		}
+
+		file := tg.FileBytes{
+			Name:  reportBytes.Name,
+			Bytes: reportBytes.Data,
+		}
+
+		msg := tg.NewDocument(chatId, file)
+		msg.Caption = "Отчет за сегодняшний день"
+		b.Bot.Send(msg)
 	}
 }
 
@@ -164,7 +188,7 @@ func (b *ReportsBot) handleRegistration(ctx context.Context, userId int64, chatI
 		return
 	}
 
-	newUser := storage.User{
+	newUser := report.User{
 		Id:             userId,
 		UserEmail:      "test@q.com",
 		UserToken:      "qweqweqwe",
@@ -197,7 +221,7 @@ func (b *ReportsBot) handleUnregistration(ctx context.Context, userId int64, cha
 	b.sendText(userNotRegisteredMsg, chatId)
 }
 
-func (b *ReportsBot) setUserToken(ctx context.Context, userInput string, chatId int64, dbUser storage.User) {
+func (b *ReportsBot) setUserToken(ctx context.Context, userInput string, chatId int64, dbUser report.User) {
 	updatedToken := strings.TrimPrefix(userInput, setTokenPrefix)
 	dbUser.UserToken = updatedToken
 
@@ -208,7 +232,7 @@ func (b *ReportsBot) setUserToken(ctx context.Context, userInput string, chatId 
 	b.sendText(tokenHasBeenSavedMsg, chatId)
 }
 
-func (b *ReportsBot) setUserTimezoneOffset(ctx context.Context, userInput string, chatId int64, dbUser storage.User) {
+func (b *ReportsBot) setUserTimezoneOffset(ctx context.Context, userInput string, chatId int64, dbUser report.User) {
 	inputOffset := strings.TrimPrefix(userInput, setOffsetPrefix)
 	updatedOffset, err := strconv.ParseInt(inputOffset, 10, 64)
 

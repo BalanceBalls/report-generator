@@ -1,43 +1,10 @@
 package storage
 
 import (
-	"context"
 	"time"
+
+	"github.com/BalanceBalls/report-generator/internal/report"
 )
-
-type Storage interface {
-	Users(ctx context.Context) ([]FlatUser, error)
-	User(ctx context.Context, userId int64) (*User, error)
-	AddUser(ctx context.Context, user User) error
-	UserExists(ctx context.Context, userId int64) bool
-	UpdateUser(ctx context.Context, user User) error
-	RemoveUser(ctx context.Context, userId int64) error
-} 
-
-type User struct {
-	Id        int64  `json:"id"`
-	UserEmail string `json:"userEmail"`
-	UserToken string `json:"userToken"`
-	IsActive  bool   `json:"isActive"`
-
-	// Minutes from UTC
-	TimezoneOffset int      `json:"timezoneOffset"`
-	Reports        []Report `json:"reports"`
-}
-
-type Report struct {
-	Id     int64       `json:"reportId"`
-	UserId int64       `json:"reportUserId"`
-	Rows   []ReportRow `json:"rows"`
-}
-
-type ReportRow struct {
-	ReportId  int64     `json:"rowReportId"`
-	Date      time.Time `json:"date"`
-	Task      string    `json:"task"`
-	Link      string    `json:"link"`
-	TimeSpent float32   `json:"timeSpent"`
-}
 
 type FlatUser struct {
 	Id             int64
@@ -58,8 +25,8 @@ type ConvertableUsers struct {
 	Users []FlatUser
 }
 
-func (cu *ConvertableUsers) Convert() []User {
-	var result []User
+func (cu *ConvertableUsers) Convert() []report.User{
+	var result []report.User
 
 	flatUserMap := make(map[[2]int64][]FlatUser)
 
@@ -69,7 +36,7 @@ func (cu *ConvertableUsers) Convert() []User {
 	}
 
 	for k, v := range flatUserMap {
-		tUser := User{
+		tUser := report.User{
 			Id:             k[0],
 			UserEmail:      v[0].UserEmail,
 			UserToken:      v[0].UserToken,
@@ -77,13 +44,13 @@ func (cu *ConvertableUsers) Convert() []User {
 			IsActive:       v[0].IsActive,
 		}
 
-		tReport := Report{
+		tReport := report.Report{
 			Id:     k[1],
 			UserId: k[0],
 		}
 
 		for _, fu := range v {
-			tRow := ReportRow{
+			tRow := report.ReportRow{
 				ReportId:  fu.ReportRowId,
 				Date:      fu.Date,
 				Task:      fu.Task,

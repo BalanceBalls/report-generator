@@ -5,18 +5,25 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"path"
 	"strconv"
+	"time"
 )
-
 const tokenHeaderKey = "PRIVATE-TOKEN"
 
+// Context keys
+const (
+	tokenCtxKey    = "token"
+	userCtxKey     = "userId"
+)
+
 type GitlabClient struct {
-	host       string
-	basePath   string
-	client     http.Client
+	host     string
+	basePath string
+	client   http.Client
 }
 
 type EventsResponse struct {
@@ -24,27 +31,32 @@ type EventsResponse struct {
 	Err    error
 }
 
-func New(host string, basePath string) *GitlabClient {
+func NewClient(host string, basePath string) *GitlabClient {
 	return &GitlabClient{
-		host:       host,
-		basePath:   basePath,
-		client:     http.Client{},
+		host:     host,
+		basePath: basePath,
+		client:   http.Client{},
 	}
 }
 
-func (gc *GitlabClient) Events(ctx context.Context, req EventsReq) ([]Event, error) {
-	path := path.Join("users", fmt.Sprint(req.UserId), "events")
+func (gc *GitlabClient) Events(ctx context.Context, before time.Time, after time.Time) ([]Event, error) {
+	ctxUserId, ok := ctx.Value(userCtxKey).(int64)
+	if !ok {
+		return nil, ErrNoUserInCtx
+	}
+
+	path := path.Join("users", fmt.Sprint(ctxUserId), "events")
 	params := url.Values{}
 
-	if !req.After.IsZero() {
-		params.Add("after", req.After.String())
+	if !after.IsZero() {
+		params.Add("after", after.String())
 	}
 
-	if !req.Before.IsZero() {
-		params.Add("before", req.Before.String())
+	if !before.IsZero() {
+		params.Add("before", before.String())
 	}
 
-	eventsData, err := gc.doRequest(ctx, path, params, req.UserToken)
+	eventsData, err := gc.doRequest(ctx, path, params)
 
 	if err != nil {
 		return nil, fmt.Errorf("Events get request failed: %w", err)
@@ -58,10 +70,10 @@ func (gc *GitlabClient) Events(ctx context.Context, req EventsReq) ([]Event, err
 	return resData, nil
 }
 
-func (gc *GitlabClient) MergeRequest(ctx context.Context, projectId int, mrId int, token string) (*MergeRequest, error) {
+func (gc *GitlabClient) MergeRequest(ctx context.Context, projectId int, mrId int) (*MergeRequest, error) {
 	path := path.Join("projects", strconv.Itoa(projectId), "merge_requests", strconv.Itoa(mrId))
 
-	res, err := gc.doRequest(ctx, path, nil, token)
+	res, err := gc.doRequest(ctx, path, nil)
 
 	if err != nil {
 		return nil, fmt.Errorf("MergeRequest get request failed: %w", err)
@@ -75,10 +87,10 @@ func (gc *GitlabClient) MergeRequest(ctx context.Context, projectId int, mrId in
 	return &resData, nil
 }
 
-func (gc *GitlabClient) Commit(ctx context.Context, projectId int, cHash string, token string) (*Commit, error) {
+func (gc *GitlabClient) Commit(ctx context.Context, projectId int, cHash string) (*Commit, error) {
 	path := path.Join("projects", strconv.Itoa(projectId), "repository", "commits", cHash)
 
-	res, err := gc.doRequest(ctx, path, nil, token)
+	res, err := gc.doRequest(ctx, path, nil)
 
 	if err != nil {
 		return nil, fmt.Errorf("Commit get request failed: %w", err)
@@ -92,15 +104,20 @@ func (gc *GitlabClient) Commit(ctx context.Context, projectId int, cHash string,
 	return &resData, nil
 }
 
-func (gc *GitlabClient) doRequest(ctx context.Context, endpointPath string, params url.Values, token string) ([]byte, error) {
+func (gc *GitlabClient) doRequest(ctx context.Context, endpointPath string, params url.Values) ([]byte, error) {
 	u := url.URL{
 		Scheme: "https",
 		Host:   gc.host,
 		Path:   path.Join(gc.basePath, endpointPath),
 	}
 
+	ctxToken, ok := ctx.Value(tokenCtxKey).(string)
+	if !ok {
+		return nil, ErrNoTokenInCtx
+	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
-	req.Header.Set(tokenHeaderKey, token)
+	req.Header.Set(tokenHeaderKey, ctxToken)
 
 	if err != nil {
 		return nil, fmt.Errorf("Could not construct request: %w", err)
@@ -110,7 +127,7 @@ func (gc *GitlabClient) doRequest(ctx context.Context, endpointPath string, para
 		req.URL.RawQuery = params.Encode()
 	}
 
-	fmt.Println(req.URL.String())
+	log.Print(req.URL.String())
 	res, err := gc.client.Do(req)
 
 	if err != nil {

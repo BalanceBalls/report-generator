@@ -11,8 +11,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/BalanceBalls/report-generator/internal/generator"
-	"github.com/BalanceBalls/report-generator/internal/storage"
+	"github.com/BalanceBalls/report-generator/internal/report"
 )
 
 type HtmlGenerator struct {
@@ -33,50 +32,50 @@ func New(reportsDir string, tmplName string, saveTooDisk bool) *HtmlGenerator {
 	}
 }
 
-func (g *HtmlGenerator) Generate(report storage.Report) (generator.Report, error) {
+func (g *HtmlGenerator) Generate(data report.Report) (report.Result, error) {
 	fmt.Println("starting report generation")
 
 	tmpl, err := template.ParseFS(tpls, g.tmplName)
 	if err != nil {
-		return generator.Report{}, fmt.Errorf(
+		return report.Result{}, fmt.Errorf(
 			"failed to parse template file for html report: %w", err)
 	}
 	var reportData bytes.Buffer
-	if err := tmpl.ExecuteTemplate(&reportData, g.tmplName, report.Rows); err != nil {
-		return generator.Report{}, fmt.Errorf(
+	if err := tmpl.ExecuteTemplate(&reportData, g.tmplName, data.Rows); err != nil {
+		return report.Result{}, fmt.Errorf(
 			"failed to generate an html report: %w", err)
 	}
 
 	reportBytes := reportData.Bytes()
 
 	if g.saveToDisk {
-		path := createReportPath(report.Id, g.reportsDir)
+		path := createReportPath(data.Id, g.reportsDir)
 		if err = createDirIfNotExist(g.reportsDir); err != nil {
-			return generator.Report{}, fmt.Errorf(
+			return report.Result{}, fmt.Errorf(
 				"failed to create reports folder: %w", err)
 		}
 
 		file, err := createFileIfNotExist(path)
 		if err != nil {
-			return generator.Report{}, fmt.Errorf(
+			return report.Result{}, fmt.Errorf(
 				"failed to create html file for report: %w", err)
 		}
 
 		_, err = file.Write(reportBytes)
 
 		if err != nil {
-			return generator.Report{}, fmt.Errorf(
+			return report.Result{}, fmt.Errorf(
 				"failed to save report into file: %w", err)
 		}
 
 		if err = file.Close(); err != nil {
-			return generator.Report{}, fmt.Errorf(
+			return report.Result{}, fmt.Errorf(
 				"failed to close html file: %w", err)
 		}
 	}
 
-	return generator.Report{
-		Name: fmt.Sprint(report.UserId) + "_" + fmt.Sprint(time.Now().UnixMilli()) + ".html",
+	return report.Result{
+		Name: fmt.Sprint(data.UserId) + "_" + fmt.Sprint(time.Now().UnixMilli()) + ".html",
 		Data: reportData.Bytes(),
 	}, nil
 }

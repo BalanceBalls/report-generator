@@ -1,15 +1,15 @@
 package gitlab
 
 import (
+	"errors"
 	"time"
 )
 
-type EventsReq struct {
-	Before    time.Time
-	After     time.Time
-	UserId    int64
-	UserToken string
-}
+var (
+	ErrNoGitActions = errors.New("no gitlab actions to report found for current day")
+	ErrNoUserInCtx  = errors.New("could not get user from context")
+	ErrNoTokenInCtx = errors.New("could not get token from context")
+)
 
 type Event struct {
 	ProjectId   int       `json:"project_id"`
