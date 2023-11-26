@@ -33,4 +33,5 @@ const (
 	userHasBeenRegisteredMsg  = "Пользователь успешно зарегестрирован. Необходимо обновить gitlab токен. Используйте /help для справки"
 	timezoneHasBeenSavedMsg   = "Часовой пояс успешно сохранен"
 	reportInProgressMsg       = "Отчет генерируется..."
+	emptyReportMsg            = "Нет данных для отчета. Отсутствуют события в git"
 )

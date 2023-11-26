@@ -40,22 +40,19 @@ const (
 	setOffsetPrefix = "offset:"
 )
 
-func New(token string) *ReportsBot {
-	bot, err := tg.NewBotAPI(token)
+func New(cfg *Config) *ReportsBot {
+	bot, err := tg.NewBotAPI(cfg.BotToken)
 	if err != nil {
 		panic(err)
 	}
 
-	sqlite, err := sqlite.New("bot.sqlite")
+	sqlite, err := sqlite.New(cfg.DbName)
 	if err != nil {
 		panic(err)
 	}
 
-	html := htmlgenerator.New("./reports", "html_report.tmpl", true)
-
-	gitHost := "localhost:4443"
-	gitBasePath := "api/v4"
-	gitlabClient := gitlab.NewClient(gitHost, gitBasePath)
+	html := htmlgenerator.New(cfg.ReportFileDir, cfg.ReportTemplate, cfg.GenerateFile)
+	gitlabClient := gitlab.NewClient(cfg.GitHost, cfg.GitBasePath)
 	reportBuilder := gitlab.NewReportBuilder(*gitlabClient)
 
 	return &ReportsBot{
@@ -74,6 +71,7 @@ func (b *ReportsBot) Serve(ctx context.Context) {
 	updateConfig.Timeout = 60
 	updates := b.Bot.GetUpdatesChan(updateConfig)
 
+	log.Print("bot is now ready to serve commands")
 	for update := range updates {
 		// ignore any non-Message updates
 		if update.Message == nil {
@@ -161,6 +159,10 @@ func (b *ReportsBot) handleReportGeneration(ctx context.Context, userId int64, c
 	case reportData := <-respch:
 		if reportData.Err != nil {
 			log.Print(reportData.Err)
+			if errors.Is(reportData.Err, gitlab.ErrNoGitActions) {
+				b.sendText(emptyReportMsg, chatId)
+				return
+			}
 			b.sendText(reportGenerationFailedMsg, chatId)
 			return
 		}

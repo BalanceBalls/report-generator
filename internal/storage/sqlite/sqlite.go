@@ -19,7 +19,7 @@ type SqliteStorage struct {
 }
 
 func New(name string) (*SqliteStorage, error) {
-	log.Printf("Initializing DB '%s'", name)
+	log.Printf("initializing DB '%s'", name)
 	db, err := sql.Open("sqlite3", name)
 
 	if err != nil {
@@ -65,7 +65,7 @@ func (s *SqliteStorage) UserExists(ctx context.Context, userId int64) bool {
 	q, err := s.db.Prepare(checkUserExists)
 
 	if err != nil {
-		log.Printf("failed to build query checkUserExists")
+		log.Print(err)
 		return false
 	}
 
@@ -116,7 +116,7 @@ func (s *SqliteStorage) UpdateUser(ctx context.Context, user report.User) error 
 func (s *SqliteStorage) RemoveUser(ctx context.Context, userId int64) error {
 	_, err := s.db.Exec(removeUser, userId)
 	if err != nil {
-		return fmt.Errorf("could not remove user: %w", err)
+		return err
 	}
 
 	return nil
@@ -126,7 +126,7 @@ func (s *SqliteStorage) Users(ctx context.Context) ([]storage.FlatUser, error) {
 	rows, err := s.db.QueryContext(ctx, getFullUsers, 10, 0)
 
 	if err != nil {
-		return []storage.FlatUser{}, fmt.Errorf("failed to fetch rows: %w", err)
+		return []storage.FlatUser{}, err
 	}
 
 	defer rows.Close()
@@ -143,12 +143,12 @@ func (s *SqliteStorage) Users(ctx context.Context) ([]storage.FlatUser, error) {
 			&tFlatUser.ReportRowId, &rawDate, &tFlatUser.Task, &tFlatUser.Link, &tFlatUser.TimeSpent)
 
 		if err != nil {
-			return []storage.FlatUser{}, fmt.Errorf("error scanning rows: %w", err)
+			return []storage.FlatUser{}, err
 		}
 
 		rowDateParsed, dateErr := time.Parse(time.RFC3339, rawDate)
 		if dateErr != nil {
-			return []storage.FlatUser{}, fmt.Errorf("error parsing date: %w", dateErr)
+			return []storage.FlatUser{}, err 
 		}
 
 		tFlatUser.Date = rowDateParsed

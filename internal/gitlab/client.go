@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"time"
 )
+
 const tokenHeaderKey = "PRIVATE-TOKEN"
 
 type GitlabClient struct {
@@ -121,7 +122,7 @@ func (gc *GitlabClient) doRequest(ctx context.Context, endpointPath string, para
 		req.URL.RawQuery = params.Encode()
 	}
 
-	log.Print(req.URL.String())
+	log.Print("outgoing request to ", req.URL.String())
 	res, err := gc.client.Do(req)
 
 	if err != nil {

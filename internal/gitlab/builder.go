@@ -130,9 +130,7 @@ func (gb *GitlabBuilder) buildRow(
 	var taskLink string
 	var actionLinks []string
 
-	fmt.Println("Building row for:", branchName)
 	hasMr, mergeRequest := tryGetMrForBranch(branchEvents)
-
 	if hasMr {
 		// If a branch has an MR
 		taskName = mergeRequest.IssueUrl
@@ -395,8 +393,6 @@ func getCommitsCountForBranch(branchEvents []Event) int {
 
 func handleErr(err error, respch chan report.Channel) {
 	if err != nil {
-		log.Print(err)
-
 		respch <- report.Channel{
 			Report: report.Report{},
 			Err:    err,
