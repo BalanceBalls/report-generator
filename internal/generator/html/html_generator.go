@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"html/template"
 	"io/fs"
-	"log"
 	"os"
 	"path/filepath"
 	"time"
@@ -35,8 +34,6 @@ func New(reportsDir string, tmplName string, saveToDisk bool) *HtmlGenerator {
 }
 
 func (g *HtmlGenerator) Generate(data report.Report) (report.Result, error) {
-	log.Print("starting report generation")
-
 	tmpl, err := template.ParseFS(tpls, g.tmplName)
 	if err != nil {
 		return report.Result{}, err

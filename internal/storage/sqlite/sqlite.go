@@ -5,11 +5,12 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 
+	"github.com/BalanceBalls/report-generator/internal/logger"
 	"github.com/BalanceBalls/report-generator/internal/report"
 	"github.com/BalanceBalls/report-generator/internal/storage"
 )
@@ -19,7 +20,7 @@ type SqliteStorage struct {
 }
 
 func New(name string) (*SqliteStorage, error) {
-	log.Printf("initializing DB '%s'", name)
+	slog.Info("initializing DB...", "db_name=", name)
 	db, err := sql.Open("sqlite3", name)
 
 	if err != nil {
@@ -62,10 +63,11 @@ func (s *SqliteStorage) AddUser(ctx context.Context, user report.User) error {
 }
 
 func (s *SqliteStorage) UserExists(ctx context.Context, userId int64) bool {
+	logger := logger.GetFromContext(ctx)
 	q, err := s.db.Prepare(checkUserExists)
 
 	if err != nil {
-		log.Print(err)
+		logger.ErrorContext(ctx, err.Error())
 		return false
 	}
 
@@ -77,28 +79,28 @@ func (s *SqliteStorage) UserExists(ctx context.Context, userId int64) bool {
 			return false
 		}
 
-		log.Print(err)
+		logger.ErrorContext(ctx, err.Error())
 	}
 
 	return true
 }
 
-func (s *SqliteStorage) User(ctx context.Context, userId int64) (*report.User, error) {
+func (s *SqliteStorage) User(ctx context.Context, userId int64) (report.User, error) {
 	q, err := s.db.Prepare(getUserById)
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to build query: %w", err)
+		return report.User{}, fmt.Errorf("failed to build query: %w", err)
 	}
 
-	user := &report.User{}
+	user := report.User{}
 	err = q.QueryRowContext(ctx, userId).Scan(&user.Id, &user.UserEmail, &user.UserToken, &user.IsActive)
 
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, storage.ErrUserNotFound
+			return report.User{}, storage.ErrUserNotFound
 		}
 
-		return nil, fmt.Errorf("failed to fetch row: %w", err)
+		return report.User{}, fmt.Errorf("failed to fetch row: %w", err)
 	}
 
 	return user, nil
@@ -148,7 +150,7 @@ func (s *SqliteStorage) Users(ctx context.Context) ([]storage.FlatUser, error) {
 
 		rowDateParsed, dateErr := time.Parse(time.RFC3339, rawDate)
 		if dateErr != nil {
-			return []storage.FlatUser{}, err 
+			return []storage.FlatUser{}, err
 		}
 
 		tFlatUser.Date = rowDateParsed

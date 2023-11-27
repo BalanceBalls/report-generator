@@ -3,21 +3,26 @@ package bot
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
+	"math"
 	"strconv"
 	"strings"
+	"time"
 
 	htmlgenerator "github.com/BalanceBalls/report-generator/internal/generator/html"
 	"github.com/BalanceBalls/report-generator/internal/gitlab"
+	"github.com/BalanceBalls/report-generator/internal/logger"
 	"github.com/BalanceBalls/report-generator/internal/report"
 	"github.com/BalanceBalls/report-generator/internal/storage"
 	"github.com/BalanceBalls/report-generator/internal/storage/sqlite"
+
 	tg "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
 type ReportsBot struct {
 	Bot tg.BotAPI
 
+	config    *Config
 	storage   Storage
 	builder   Builder
 	generator Generator
@@ -58,6 +63,7 @@ func New(cfg *Config) *ReportsBot {
 	return &ReportsBot{
 		Bot: *bot,
 
+		config:    cfg,
 		storage:   sqlite,
 		generator: html,
 		builder:   reportBuilder,
@@ -65,18 +71,30 @@ func New(cfg *Config) *ReportsBot {
 }
 
 func (b *ReportsBot) Serve(ctx context.Context) {
-	log.Printf("authorized on account %s", b.Bot.Self.UserName)
+	slog.Info("bot authorized to telegram", "user", b.Bot.Self.UserName)
 
 	updateConfig := tg.NewUpdate(0)
-	updateConfig.Timeout = 60
+	updateConfig.Timeout = b.config.CommandsTimeout
 	updates := b.Bot.GetUpdatesChan(updateConfig)
 
-	log.Print("bot is now ready to serve commands")
+	slog.Info("bot is now ready to serve commands")
 	for update := range updates {
 		// ignore any non-Message updates
 		if update.Message == nil {
 			continue
 		}
+
+		updateCtx, cancel := context.WithTimeout(ctx, time.Second*time.Duration(b.config.CommandsTimeout))
+		defer cancel()
+
+		commandLogger := slog.With(
+			slog.Group("context",
+				slog.Int("trace_id", update.UpdateID),
+				slog.Int64("tg_chat_id", update.Message.Chat.ID),
+				slog.Int64("tg_user_id", update.Message.From.ID),
+				slog.String("text", update.Message.Text),
+			))
+		updateCtx = logger.AddToContext(ctx, commandLogger)
 
 		// Handling user input
 		if !update.Message.IsCommand() {
@@ -84,10 +102,10 @@ func (b *ReportsBot) Serve(ctx context.Context) {
 			chatId := update.Message.Chat.ID
 
 			userInput := update.Message.Text
-			dbUser, err := b.storage.User(ctx, userId)
+			dbUser, err := b.storage.User(updateCtx, userId)
 
 			if err != nil {
-				log.Print(err)
+				commandLogger.ErrorContext(updateCtx, "failed to get user info", "error", err)
 				if errors.Is(err, storage.ErrUserNotFound) {
 					b.sendText(userNotRegisteredMsg, chatId)
 					continue
@@ -95,11 +113,11 @@ func (b *ReportsBot) Serve(ctx context.Context) {
 			}
 
 			if strings.HasPrefix(userInput, setTokenPrefix) {
-				b.setUserToken(ctx, userInput, chatId, *dbUser)
+				go b.setUserToken(updateCtx, userInput, chatId, dbUser)
 			} else if strings.HasPrefix(userInput, setOffsetPrefix) {
-				b.setUserTimezoneOffset(ctx, userInput, chatId, *dbUser)
+				go b.setUserTimezoneOffset(updateCtx, userInput, chatId, dbUser)
 			} else {
-				log.Printf("user input was not recognized: %s", userInput)
+				commandLogger.WarnContext(updateCtx, "user input was not recognized", "input", userInput)
 			}
 
 			continue
@@ -111,31 +129,32 @@ func (b *ReportsBot) Serve(ctx context.Context) {
 		// Extract the command from the Message.
 		switch update.Message.Command() {
 		case startCmd:
-			log.Printf("start cmd reveived from %d", userId)
-			b.sendText(helloMsg, chatId)
+			commandLogger.InfoContext(updateCtx, "/start cmd reveived")
+			go b.sendText(helloMsg, chatId)
 		case helpCmd:
-			log.Printf("help cmd reveived from %d", userId)
-			b.sendText(helpMsg, chatId)
+			commandLogger.InfoContext(updateCtx, "/help cmd reveived")
+			go b.sendText(helpMsg, chatId)
 		case regCmd:
-			log.Printf("reg cmd reveived from %d", userId)
-			go b.handleRegistration(ctx, userId, chatId)
+			commandLogger.InfoContext(updateCtx, "/reg cmd reveived")
+			go b.handleRegistration(updateCtx, userId, chatId)
 		case unregCmd:
-			log.Printf("unreg cmd reveived from %d", userId)
-			go b.handleUnregistration(ctx, userId, chatId)
+			commandLogger.InfoContext(updateCtx, "/unreg cmd reveived")
+			go b.handleUnregistration(updateCtx, userId, chatId)
 		case genDayCmd:
-			log.Printf("genDay cmd reveived from %d", userId)
-			go b.handleReportGeneration(ctx, userId, chatId)
+			commandLogger.InfoContext(updateCtx, "/genDay cmd reveived")
+			go b.handleReportGeneration(updateCtx, userId, chatId)
 		default:
-			log.Print("command was not recognized:", update.Message.Command())
+			commandLogger.WarnContext(updateCtx, "command was not recognized")
 		}
 	}
 }
 
 func (b *ReportsBot) handleReportGeneration(ctx context.Context, userId int64, chatId int64) {
+	logger := logger.GetFromContext(ctx)
 	user, err := b.storage.User(ctx, userId)
 
 	if err != nil {
-		log.Print(err)
+		logger.ErrorContext(ctx, "report generation failed", "error", err)
 		if errors.Is(err, storage.ErrUserNotFound) {
 			b.sendText(userNotRegisteredMsg, chatId)
 			return
@@ -145,20 +164,15 @@ func (b *ReportsBot) handleReportGeneration(ctx context.Context, userId int64, c
 	}
 
 	b.sendText(reportInProgressMsg, chatId)
-
-	ctx = context.WithValue(ctx, "userId", user.Id)
-	ctx = context.WithValue(ctx, "token", user.UserToken)
-	ctx = context.WithValue(ctx, "tzOffset", user.TimezoneOffset)
-
 	respch := make(chan report.Channel)
-	go b.builder.Build(ctx, respch)
+	go b.builder.Build(ctx, user, respch)
 
 	select {
 	case <-ctx.Done():
-		log.Print(ctx.Err())
+		logger.ErrorContext(ctx, "update cancelled", "error", ctx.Err())
 	case reportData := <-respch:
 		if reportData.Err != nil {
-			log.Print(reportData.Err)
+			logger.ErrorContext(ctx, "failed to get report data", "error", reportData.Err)
 			if errors.Is(reportData.Err, gitlab.ErrNoGitActions) {
 				b.sendText(emptyReportMsg, chatId)
 				return
@@ -169,7 +183,7 @@ func (b *ReportsBot) handleReportGeneration(ctx context.Context, userId int64, c
 
 		reportBytes, err := b.generator.Generate(reportData.Report)
 		if err != nil {
-			log.Print(err)
+			logger.ErrorContext(ctx, "report generation failed", "error", err)
 			return
 		}
 
@@ -185,6 +199,7 @@ func (b *ReportsBot) handleReportGeneration(ctx context.Context, userId int64, c
 }
 
 func (b *ReportsBot) handleRegistration(ctx context.Context, userId int64, chatId int64) {
+	logger := logger.GetFromContext(ctx)
 	alreadyRegistered := b.storage.UserExists(ctx, userId)
 	if alreadyRegistered {
 		b.sendText(userAlreadyRegisteredMsg, chatId)
@@ -200,7 +215,7 @@ func (b *ReportsBot) handleRegistration(ctx context.Context, userId int64, chatI
 	}
 
 	if err := b.storage.AddUser(ctx, newUser); err != nil {
-		log.Print("failed to add new user", err)
+		logger.ErrorContext(ctx, "failed to add new user", "error", err)
 		b.sendText(userRegistrationErrorMsg, chatId)
 
 		return
@@ -210,11 +225,12 @@ func (b *ReportsBot) handleRegistration(ctx context.Context, userId int64, chatI
 }
 
 func (b *ReportsBot) handleUnregistration(ctx context.Context, userId int64, chatId int64) {
+	logger := logger.GetFromContext(ctx)
 	isRegistered := b.storage.UserExists(ctx, userId)
 
 	if isRegistered {
 		if err := b.storage.RemoveUser(ctx, userId); err != nil {
-			log.Print(err)
+			logger.ErrorContext(ctx, "failed to remove user", "error", err)
 			b.sendText(userDataUpdateErrorMsg, chatId)
 		}
 		b.sendText(userHasBeenRemovedMsg, chatId)
@@ -225,30 +241,42 @@ func (b *ReportsBot) handleUnregistration(ctx context.Context, userId int64, cha
 }
 
 func (b *ReportsBot) setUserToken(ctx context.Context, userInput string, chatId int64, dbUser report.User) {
+	logger := logger.GetFromContext(ctx)
 	updatedToken := strings.TrimPrefix(userInput, setTokenPrefix)
 	dbUser.UserToken = updatedToken
 
 	if err := b.storage.UpdateUser(ctx, dbUser); err != nil {
-		log.Print(err)
+		logger.ErrorContext(ctx, "failed to update user's token", "error", err)
 		b.sendText(userDataUpdateErrorMsg, chatId)
+		return
 	}
+	logger.InfoContext(ctx, "user token updated successfully")
 	b.sendText(tokenHasBeenSavedMsg, chatId)
 }
 
 func (b *ReportsBot) setUserTimezoneOffset(ctx context.Context, userInput string, chatId int64, dbUser report.User) {
+	logger := logger.GetFromContext(ctx)
 	inputOffset := strings.TrimPrefix(userInput, setOffsetPrefix)
 	updatedOffset, err := strconv.ParseInt(inputOffset, 10, 64)
 
+	if math.Abs(float64(updatedOffset)) > 720 {
+		logger.ErrorContext(ctx, "offset is larger than half a day")
+	}
+
 	if err != nil {
-		log.Print("failed to parse user input: ", err)
+		logger.ErrorContext(ctx, "failed to parse user input", "error", err)
 		b.sendText(userDataUpdateErrorMsg, chatId)
+		return
 	}
 
 	dbUser.TimezoneOffset = int(updatedOffset)
 	if err := b.storage.UpdateUser(ctx, dbUser); err != nil {
-		log.Print(err)
+		logger.ErrorContext(ctx, "failed to update user's timezone offset", "error", err)
 		b.sendText(userDataUpdateErrorMsg, chatId)
+		return
 	}
+
+	logger.InfoContext(ctx, "user timezone offset updated successfully")
 	b.sendText(timezoneHasBeenSavedMsg, chatId)
 }
 
@@ -257,6 +285,6 @@ func (b *ReportsBot) sendText(text string, chatId int64) {
 	message.Text = text
 
 	if _, err := b.Bot.Send(message); err != nil {
-		log.Panic(err)
+		slog.Error("failed to send a message to bot", "error", err)
 	}
 }

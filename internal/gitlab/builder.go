@@ -3,11 +3,11 @@ package gitlab
 import (
 	"context"
 	"fmt"
-	"log"
 	"path"
 	"strings"
 	"time"
 
+	"github.com/BalanceBalls/report-generator/internal/logger"
 	"github.com/BalanceBalls/report-generator/internal/report"
 	"golang.org/x/exp/slices"
 )
@@ -38,13 +38,13 @@ func NewReportBuilder(client GitlabClient) *GitlabBuilder {
 	}
 }
 
-func (gb *GitlabBuilder) Build(ctx context.Context, respch chan report.Channel) {
+func (gb *GitlabBuilder) Build(ctx context.Context, user report.User, respch chan report.Channel) {
+	logger := logger.GetFromContext(ctx)
 	result := report.Report{
-		UserId: ctx.Value(userCtxKey).(int64),
+		UserId: user.Id,
 	}
 
-	tzOffset := ctx.Value(tzOffsetCtxKey).(int)
-	log.Print(tzOffset)
+	logger.InfoContext(ctx, "starting report building..", "tzOffset", user.TimezoneOffset)
 
 	// Current time with the server's offset
 	pointOfReference := time.Date(2023, 10, 05, 03, 34, 58, 651387237, time.UTC) //time.Now().UTC().Add(time.Minute * time.Duration(gb.tzOffset))
@@ -56,7 +56,7 @@ func (gb *GitlabBuilder) Build(ctx context.Context, respch chan report.Channel) 
 	before := pointOfReference.AddDate(0, 0, 1)
 	after := pointOfReference.AddDate(0, 0, -1)
 
-	events, err := gb.client.Events(ctx, before, after)
+	events, err := gb.client.Events(ctx, user, before, after)
 	handleErr(err, respch)
 
 	var filteredEvents []Event
@@ -69,7 +69,7 @@ func (gb *GitlabBuilder) Build(ctx context.Context, respch chan report.Channel) 
 	filteredEvents, err = filterByActions(filteredEvents)
 	handleErr(err, respch)
 
-	filteredEvents, err = gb.loadMergeRequests(ctx, filteredEvents)
+	filteredEvents, err = gb.loadMergeRequests(ctx, user, filteredEvents)
 	handleErr(err, respch)
 
 	sortEvents(filteredEvents)
@@ -83,7 +83,7 @@ func (gb *GitlabBuilder) Build(ctx context.Context, respch chan report.Channel) 
 
 	for _, branchName := range orderedBranches {
 		events := branch2events[branchName]
-		row := gb.buildRow(ctx, branchName, events, prevTime)
+		row := gb.buildRow(ctx, user, branchName, events, prevTime)
 		result.Rows = append(result.Rows, row)
 
 		// Use time of the last event for the branch
@@ -97,7 +97,7 @@ func (gb *GitlabBuilder) Build(ctx context.Context, respch chan report.Channel) 
 	}
 }
 
-func (gb *GitlabBuilder) loadMergeRequests(ctx context.Context, events []Event) ([]Event, error) {
+func (gb *GitlabBuilder) loadMergeRequests(ctx context.Context, user report.User, events []Event) ([]Event, error) {
 	loaded := map[int]MergeRequest{}
 	for i, event := range events {
 
@@ -108,7 +108,7 @@ func (gb *GitlabBuilder) loadMergeRequests(ctx context.Context, events []Event) 
 		}
 
 		if event.TargetType == mergeRequestTarget {
-			mr, err := gb.client.MergeRequest(ctx, event.ProjectId, event.TargetIid)
+			mr, err := gb.client.MergeRequest(ctx, user, event.ProjectId, event.TargetIid)
 
 			if err != nil {
 				return nil, fmt.Errorf("could not get MR data: %w", err)
@@ -123,7 +123,7 @@ func (gb *GitlabBuilder) loadMergeRequests(ctx context.Context, events []Event) 
 }
 
 func (gb *GitlabBuilder) buildRow(
-	ctx context.Context, branchName string, branchEvents []Event, prevTime time.Time,
+	ctx context.Context, user report.User, branchName string, branchEvents []Event, prevTime time.Time,
 ) report.ReportRow {
 
 	var taskName string
@@ -141,7 +141,7 @@ func (gb *GitlabBuilder) buildRow(
 		taskName = branchEvents[0].PushData.Ref
 	}
 
-	commitLinks, err := gb.getCommitLinks(ctx, branchEvents)
+	commitLinks, err := gb.getCommitLinks(ctx, user, branchEvents)
 	if err != nil {
 		taskLink = "Failed to get commits"
 	} else {
@@ -165,7 +165,7 @@ func (gb *GitlabBuilder) buildRow(
 	return result
 }
 
-func (gb *GitlabBuilder) getCommitLinks(ctx context.Context, branchEvents []Event) ([]string, error) {
+func (gb *GitlabBuilder) getCommitLinks(ctx context.Context, user report.User, branchEvents []Event) ([]string, error) {
 	var result []string
 
 	var firstCommit Event
@@ -181,6 +181,7 @@ func (gb *GitlabBuilder) getCommitLinks(ctx context.Context, branchEvents []Even
 	// acquire base commit URL which will be used for other commits
 	commitInfo, err := gb.client.Commit(
 		ctx,
+		user,
 		firstCommit.ProjectId,
 		firstCommit.PushData.CommitTo)
 

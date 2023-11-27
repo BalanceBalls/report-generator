@@ -2,6 +2,8 @@ package report
 
 import "time"
 
+type LoggerKey interface{}
+
 type User struct {
 	Id        int64  `json:"id"`
 	UserEmail string `json:"userEmail"`
@@ -29,7 +31,7 @@ type ReportRow struct {
 
 type Channel struct {
 	Report Report
-	Err error
+	Err    error
 }
 
 type Result struct {

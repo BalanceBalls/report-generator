@@ -7,7 +7,7 @@ import (
 )
 
 type Storage interface {
-	User(ctx context.Context, userId int64) (*report.User, error)
+	User(ctx context.Context, userId int64) (report.User, error)
 	AddUser(ctx context.Context, user report.User) error
 	UserExists(ctx context.Context, userId int64) bool
 	UpdateUser(ctx context.Context, user report.User) error
@@ -15,7 +15,7 @@ type Storage interface {
 }
 
 type Builder interface {
-	Build(ctx context.Context, respch chan report.Channel)
+	Build(ctx context.Context, user report.User, respch chan report.Channel)
 }
 
 type Generator interface {

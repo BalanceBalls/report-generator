@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"path"
 	"strconv"
 	"time"
+
+	"github.com/BalanceBalls/report-generator/internal/logger"
+	"github.com/BalanceBalls/report-generator/internal/report"
 )
 
 const tokenHeaderKey = "PRIVATE-TOKEN"
@@ -34,13 +36,9 @@ func NewClient(host string, basePath string) *GitlabClient {
 	}
 }
 
-func (gc *GitlabClient) Events(ctx context.Context, before time.Time, after time.Time) ([]Event, error) {
-	ctxUserId, ok := ctx.Value(userCtxKey).(int64)
-	if !ok {
-		return nil, ErrNoUserInCtx
-	}
-
-	path := path.Join("users", fmt.Sprint(ctxUserId), "events")
+func (gc *GitlabClient) Events(ctx context.Context, user report.User, before time.Time, after time.Time) ([]Event, error) {
+	logger := logger.GetFromContext(ctx)
+	path := path.Join("users", fmt.Sprint(user.Id), "events")
 	params := url.Values{}
 
 	if !after.IsZero() {
@@ -51,68 +49,72 @@ func (gc *GitlabClient) Events(ctx context.Context, before time.Time, after time
 		params.Add("before", before.String())
 	}
 
-	eventsData, err := gc.doRequest(ctx, path, params)
+	eventsData, err := gc.doRequest(ctx, user.UserToken, path, params)
 
 	if err != nil {
+		logger.ErrorContext(ctx, "request failed", "error", err)
 		return nil, fmt.Errorf("Events get request failed: %w", err)
 	}
 
 	var resData []Event
 
 	if err = json.Unmarshal(eventsData, &resData); err != nil {
+		logger.ErrorContext(ctx, "response parsing failed", "error", err)
 		return nil, fmt.Errorf("Could not parse response data: %w", err)
 	}
 	return resData, nil
 }
 
-func (gc *GitlabClient) MergeRequest(ctx context.Context, projectId int, mrId int) (*MergeRequest, error) {
+func (gc *GitlabClient) MergeRequest(ctx context.Context, user report.User, projectId int, mrId int) (*MergeRequest, error) {
+	logger := logger.GetFromContext(ctx)
 	path := path.Join("projects", strconv.Itoa(projectId), "merge_requests", strconv.Itoa(mrId))
 
-	res, err := gc.doRequest(ctx, path, nil)
+	res, err := gc.doRequest(ctx, user.UserToken, path, nil)
 
 	if err != nil {
+		logger.ErrorContext(ctx, "request failed", "error", err)
 		return nil, fmt.Errorf("MergeRequest get request failed: %w", err)
 	}
 
 	var resData MergeRequest
 	if err = json.Unmarshal(res, &resData); err != nil {
+		logger.ErrorContext(ctx, "response parsing failed", "error", err)
 		return nil, fmt.Errorf("Could not parse response data: %w", err)
 	}
 
 	return &resData, nil
 }
 
-func (gc *GitlabClient) Commit(ctx context.Context, projectId int, cHash string) (*Commit, error) {
+func (gc *GitlabClient) Commit(ctx context.Context, user report.User, projectId int, cHash string) (*Commit, error) {
+	logger := logger.GetFromContext(ctx)
 	path := path.Join("projects", strconv.Itoa(projectId), "repository", "commits", cHash)
 
-	res, err := gc.doRequest(ctx, path, nil)
+	res, err := gc.doRequest(ctx, user.UserToken, path, nil)
 
 	if err != nil {
+		logger.ErrorContext(ctx, "request failed", "error", err)
 		return nil, fmt.Errorf("Commit get request failed: %w", err)
 	}
 
 	var resData Commit
 	if err = json.Unmarshal(res, &resData); err != nil {
+		logger.ErrorContext(ctx, "response parsing failed", "error", err)
 		return nil, fmt.Errorf("Could not parse response data: %w", err)
 	}
 
 	return &resData, nil
 }
 
-func (gc *GitlabClient) doRequest(ctx context.Context, endpointPath string, params url.Values) ([]byte, error) {
+func (gc *GitlabClient) doRequest(ctx context.Context, token string, endpointPath string, params url.Values) ([]byte, error) {
+	logger := logger.GetFromContext(ctx)
 	u := url.URL{
 		Scheme: "https",
 		Host:   gc.host,
 		Path:   path.Join(gc.basePath, endpointPath),
 	}
 
-	ctxToken, ok := ctx.Value(tokenCtxKey).(string)
-	if !ok {
-		return nil, ErrNoTokenInCtx
-	}
-
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
-	req.Header.Set(tokenHeaderKey, ctxToken)
+	req.Header.Set(tokenHeaderKey, token)
 
 	if err != nil {
 		return nil, fmt.Errorf("Could not construct request: %w", err)
@@ -122,16 +124,20 @@ func (gc *GitlabClient) doRequest(ctx context.Context, endpointPath string, para
 		req.URL.RawQuery = params.Encode()
 	}
 
-	log.Print("outgoing request to ", req.URL.String())
 	res, err := gc.client.Do(req)
+	logger.InfoContext(ctx, "http request finished",
+		"request_url", res.Request.URL.String(),
+		"status_code", res.StatusCode)
 
 	if err != nil {
+		logger.ErrorContext(ctx, "http request failed", "error", err)
 		return nil, fmt.Errorf("Failed to query gitlab api (%q) : %w", endpointPath, err)
 	}
 
 	resBody, err := io.ReadAll(res.Body)
 
 	if err != nil {
+		logger.ErrorContext(ctx, "response body read failed", "error", err)
 		return nil, fmt.Errorf("Failed to read response body: %w", err)
 	}
 
