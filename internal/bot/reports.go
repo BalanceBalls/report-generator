@@ -41,8 +41,9 @@ const (
 
 // user input prefixes
 const (
-	setTokenPrefix  = "token:"
-	setOffsetPrefix = "offset:"
+	setTokenPrefix    = "token:"
+	setOffsetPrefix   = "offset:"
+	setGitlabIdPrefix = "id:"
 )
 
 func New(cfg *Config) *ReportsBot {
@@ -73,6 +74,10 @@ func New(cfg *Config) *ReportsBot {
 func (b *ReportsBot) Serve(ctx context.Context) {
 	slog.Info("bot authorized to telegram", "user", b.Bot.Self.UserName)
 
+	if err := b.storage.Up(ctx); err != nil {
+		slog.ErrorContext(ctx, err.Error())
+		panic(err)
+	}
 	updateConfig := tg.NewUpdate(0)
 	updateConfig.Timeout = b.config.CommandsTimeout
 	updates := b.Bot.GetUpdatesChan(updateConfig)
@@ -116,6 +121,8 @@ func (b *ReportsBot) Serve(ctx context.Context) {
 				go b.setUserToken(updateCtx, userInput, chatId, dbUser)
 			} else if strings.HasPrefix(userInput, setOffsetPrefix) {
 				go b.setUserTimezoneOffset(updateCtx, userInput, chatId, dbUser)
+			} else if strings.HasPrefix(userInput, setGitlabIdPrefix) {
+				go b.setUserGitlabId(updateCtx, userInput, chatId, dbUser)
 			} else {
 				commandLogger.WarnContext(updateCtx, "user input was not recognized", "input", userInput)
 			}
@@ -160,6 +167,18 @@ func (b *ReportsBot) handleReportGeneration(ctx context.Context, userId int64, c
 			return
 		}
 		b.sendText(reportGenerationFailedMsg, chatId)
+		return
+	}
+
+	if user.GitlabId == 0 {
+		logger.ErrorContext(ctx, "gitlab id is not set for user")
+		b.sendText(gitlabIdNotSetErrorMsg, chatId)
+		return
+	}
+
+	if user.UserToken == empty {
+		logger.ErrorContext(ctx, "user token is not set for user")
+		b.sendText(tokenNotSetErrorMsg, chatId)
 		return
 	}
 
@@ -208,8 +227,9 @@ func (b *ReportsBot) handleRegistration(ctx context.Context, userId int64, chatI
 
 	newUser := report.User{
 		Id:             userId,
+		GitlabId:       0,
 		UserEmail:      "test@q.com",
-		UserToken:      "qweqweqwe",
+		UserToken:      "",
 		IsActive:       true,
 		TimezoneOffset: 200,
 	}
@@ -238,6 +258,28 @@ func (b *ReportsBot) handleUnregistration(ctx context.Context, userId int64, cha
 	}
 
 	b.sendText(userNotRegisteredMsg, chatId)
+}
+
+func (b *ReportsBot) setUserGitlabId(ctx context.Context, userInput string, chatId int64, dbUser report.User) {
+	logger := logger.GetFromContext(ctx)
+	inputGitlabId := strings.TrimPrefix(userInput, setGitlabIdPrefix)
+	updatedGitlabId, err := strconv.Atoi(inputGitlabId)
+
+	if err != nil {
+		logger.ErrorContext(ctx, "could not parse user input for gitlab id", "reason", err)
+		b.sendText(gitlabIdBadInputErrorMsg, chatId)
+		return
+	}
+
+	dbUser.GitlabId = updatedGitlabId
+
+	if err := b.storage.UpdateUser(ctx, dbUser); err != nil {
+		logger.ErrorContext(ctx, "failed to update user's gitlab id", "error", err)
+		b.sendText(userDataUpdateErrorMsg, chatId)
+		return
+	}
+	logger.InfoContext(ctx, "gitlab id updated successfully")
+	b.sendText(gitlabIdHasBeenSavedMsg, chatId)
 }
 
 func (b *ReportsBot) setUserToken(ctx context.Context, userInput string, chatId int64, dbUser report.User) {

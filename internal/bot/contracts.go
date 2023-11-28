@@ -12,6 +12,7 @@ type Storage interface {
 	UserExists(ctx context.Context, userId int64) bool
 	UpdateUser(ctx context.Context, user report.User) error
 	RemoveUser(ctx context.Context, userId int64) error
+	Up(ctx context.Context) error
 }
 
 type Builder interface {

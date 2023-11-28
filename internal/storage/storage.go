@@ -8,6 +8,7 @@ import (
 
 type FlatUser struct {
 	Id             int64
+	GitlabId       int
 	UserEmail      string
 	UserToken      string
 	TimezoneOffset int
@@ -25,7 +26,7 @@ type ConvertableUsers struct {
 	Users []FlatUser
 }
 
-func (cu *ConvertableUsers) Convert() []report.User{
+func (cu *ConvertableUsers) Convert() []report.User {
 	var result []report.User
 
 	flatUserMap := make(map[[2]int64][]FlatUser)
@@ -38,6 +39,7 @@ func (cu *ConvertableUsers) Convert() []report.User{
 	for k, v := range flatUserMap {
 		tUser := report.User{
 			Id:             k[0],
+			GitlabId:       v[0].GitlabId,
 			UserEmail:      v[0].UserEmail,
 			UserToken:      v[0].UserToken,
 			TimezoneOffset: v[0].TimezoneOffset,

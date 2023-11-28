@@ -4,6 +4,7 @@ const (
 	createUsersTable = `
 CREATE TABLE IF NOT EXISTS users (
   id								INT PRIMARY KEY,
+	gitlab_id         INT,
   user_email 				TEXT,
   user_token 				TEXT,
 	timezone_offset 	INT,
@@ -31,7 +32,7 @@ CREATE TABLE IF NOT EXISTS rows (
 
 	getFullUsers = `
 SELECT 
-  u.id, u.user_email, u.user_token, u.is_active,
+  u.id, u.gitlab_id, u.user_email, u.user_token, u.is_active,
   r.id, r.user_id, 
   ro.report_id, ro.date, ro.task, ro.link, ro.time_spent
 FROM users u 
@@ -42,18 +43,19 @@ OFFSET ?`
 
 	getUserById = `
 SELECT 
-  id, user_email, user_token, is_active 
+  id, gitlab_id, user_email, user_token, is_active 
 FROM users 
 WHERE id = ?
   `
 
 	addUser = `
-INSERT INTO users (id, user_email, user_token, timezone_offset, is_active) 
-VALUES (?, ?, ?, ?, ?)
+INSERT INTO users (id, gitlab_id, user_email, user_token, timezone_offset, is_active) 
+VALUES (?, ?, ?, ?, ?, ?)
 	`
 
 	updateUser = `
 UPDATE users SET 
+	gitlab_id = ?,
 	user_email = ?,
 	user_token = ?,
 	timezone_offset = ?

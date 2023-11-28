@@ -38,7 +38,7 @@ func NewClient(host string, basePath string) *GitlabClient {
 
 func (gc *GitlabClient) Events(ctx context.Context, user report.User, before time.Time, after time.Time) ([]Event, error) {
 	logger := logger.GetFromContext(ctx)
-	path := path.Join("users", fmt.Sprint(user.Id), "events")
+	path := path.Join("users", fmt.Sprint(user.GitlabId), "events")
 	params := url.Values{}
 
 	if !after.IsZero() {
@@ -114,24 +114,28 @@ func (gc *GitlabClient) doRequest(ctx context.Context, token string, endpointPat
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
-	req.Header.Set(tokenHeaderKey, token)
-
 	if err != nil {
 		return nil, fmt.Errorf("Could not construct request: %w", err)
 	}
 
+	req.Header.Set(tokenHeaderKey, token)
 	if params != nil {
 		req.URL.RawQuery = params.Encode()
 	}
 
 	res, err := gc.client.Do(req)
-	logger.InfoContext(ctx, "http request finished",
-		"request_url", res.Request.URL.String(),
-		"status_code", res.StatusCode)
 
 	if err != nil {
 		logger.ErrorContext(ctx, "http request failed", "error", err)
 		return nil, fmt.Errorf("Failed to query gitlab api (%q) : %w", endpointPath, err)
+	}
+
+	logger.InfoContext(ctx, "http request finished",
+		"request_url", res.Request.URL.String(),
+		"status_code", res.StatusCode)
+
+	if res.StatusCode >= 400 {
+		return nil, fmt.Errorf("response status code does not indicate success: %d", res.StatusCode)
 	}
 
 	resBody, err := io.ReadAll(res.Body)

@@ -6,6 +6,7 @@ type LoggerKey interface{}
 
 type User struct {
 	Id        int64  `json:"id"`
+	GitlabId  int    `json:"gitlabId"`
 	UserEmail string `json:"userEmail"`
 	UserToken string `json:"userToken"`
 	IsActive  bool   `json:"isActive"`

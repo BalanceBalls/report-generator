@@ -54,7 +54,7 @@ func (s *SqliteStorage) Up(ctx context.Context) error {
 }
 
 func (s *SqliteStorage) AddUser(ctx context.Context, user report.User) error {
-	_, err := s.db.Exec(addUser, user.Id, user.UserEmail, user.UserToken, user.TimezoneOffset, user.IsActive)
+	_, err := s.db.Exec(addUser, user.Id, user.GitlabId, user.UserEmail, user.UserToken, user.TimezoneOffset, user.IsActive)
 	if err != nil {
 		return fmt.Errorf("could not add new user: %w", err)
 	}
@@ -93,7 +93,7 @@ func (s *SqliteStorage) User(ctx context.Context, userId int64) (report.User, er
 	}
 
 	user := report.User{}
-	err = q.QueryRowContext(ctx, userId).Scan(&user.Id, &user.UserEmail, &user.UserToken, &user.IsActive)
+	err = q.QueryRowContext(ctx, userId).Scan(&user.Id, &user.GitlabId, &user.UserEmail, &user.UserToken, &user.IsActive)
 
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -107,7 +107,7 @@ func (s *SqliteStorage) User(ctx context.Context, userId int64) (report.User, er
 }
 
 func (s *SqliteStorage) UpdateUser(ctx context.Context, user report.User) error {
-	_, err := s.db.Exec(updateUser, user.UserEmail, user.UserToken, user.TimezoneOffset, user.Id)
+	_, err := s.db.Exec(updateUser, user.GitlabId, user.UserEmail, user.UserToken, user.TimezoneOffset, user.Id)
 	if err != nil {
 		return fmt.Errorf("could not update user: %w", err)
 	}
@@ -140,7 +140,7 @@ func (s *SqliteStorage) Users(ctx context.Context) ([]storage.FlatUser, error) {
 
 		var rawDate string
 		err := rows.Scan(
-			&tFlatUser.Id, &tFlatUser.UserEmail, &tFlatUser.UserToken, &tFlatUser.IsActive,
+			&tFlatUser.Id, &tFlatUser.GitlabId, &tFlatUser.UserEmail, &tFlatUser.UserToken, &tFlatUser.IsActive,
 			&tFlatUser.ReportId, &tFlatUser.UserId,
 			&tFlatUser.ReportRowId, &rawDate, &tFlatUser.Task, &tFlatUser.Link, &tFlatUser.TimeSpent)
 
