@@ -11,13 +11,6 @@ var (
 	ErrNoTokenInCtx = errors.New("could not get token from context")
 )
 
-// Context keys
-const (
-	tokenCtxKey    = "token"
-	userCtxKey     = "userId"
-	tzOffsetCtxKey = "tzOffset"
-)
-
 type Event struct {
 	ProjectId   int       `json:"project_id"`
 	ActionName  string    `json:"action_name"`

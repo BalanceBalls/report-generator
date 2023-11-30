@@ -84,6 +84,7 @@ func (b *ReportsBot) Serve(ctx context.Context) {
 	updates := b.Bot.GetUpdatesChan(updateConfig)
 
 	slog.Info("bot is now ready to serve commands")
+
 	for update := range updates {
 		// ignore any non-Message updates
 		if update.Message == nil {
@@ -100,7 +101,7 @@ func (b *ReportsBot) Serve(ctx context.Context) {
 				slog.Int64("tg_user_id", update.Message.From.ID),
 				slog.String("text", update.Message.Text),
 			))
-		updateCtx = logger.AddToContext(ctx, commandLogger)
+		updateCtx = logger.AddToContext(updateCtx, commandLogger)
 
 		// Handling user input
 		if !update.Message.IsCommand() {
@@ -214,7 +215,9 @@ func (b *ReportsBot) handleReportGeneration(ctx context.Context, userId int64, c
 
 		msg := tg.NewDocument(chatId, file)
 		msg.Caption = "Отчет за сегодняшний день"
-		b.Bot.Send(msg)
+		if _, err = b.Bot.Send(msg); err != nil {
+			logger.ErrorContext(ctx, "failed to send report", "reason", err.Error())
+		}
 	}
 }
 

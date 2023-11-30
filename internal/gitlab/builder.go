@@ -47,7 +47,7 @@ func (gb *GitlabBuilder) Build(ctx context.Context, user report.User, respch cha
 	logger.InfoContext(ctx, "starting report building..", "tzOffset", user.TimezoneOffset)
 
 	// Current time with the server's offset
-	pointOfReference := time.Date(2023, 10, 05, 03, 34, 58, 651387237, time.UTC) //time.Now().UTC().Add(time.Minute * time.Duration(gb.tzOffset))
+	pointOfReference := time.Now().UTC().Add(time.Minute * time.Duration(user.TimezoneOffset))
 	// Get start time of the current day
 	timeRangeStart := pointOfReference.Truncate(time.Hour * 24)
 	// Set time range to a whole day
@@ -146,11 +146,10 @@ func (gb *GitlabBuilder) buildRow(
 		taskLink = "Failed to get commits"
 	} else {
 		actionLinks = append(actionLinks, commitLinks...)
+		taskLink = strings.Join(actionLinks, " \n ")
 	}
 
-	taskLink = strings.Join(actionLinks, " \n ")
 	timeSpent := getHoursSpentOnBranch(prevTime, branchEvents)
-
 	result := report.ReportRow{
 		ReportId: 0,
 		Date:     branchEvents[0].CreatedAt,
@@ -345,6 +344,10 @@ func getHoursSpentOnBranch(prevTime time.Time, events []Event) float64 {
 		} else {
 			return 0
 		}
+	}
+
+	if len(events) == 1 {
+		return events[0].CreatedAt.Sub(prevTime).Hours()
 	}
 
 	for i := 1; i < len(events); i++ {
