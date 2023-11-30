@@ -1,15 +1,15 @@
-package sqlite
+package postgres
 
 import "fmt"
 
-func (s *SqliteStorage) Seed() error {
+func (s *PostgresStorage) Seed() error {
 	usersSeed := `INSERT INTO users (id, gitlab_id, user_email, user_token, timezone_offset, is_active) VALUES (?, ?, ?, ?, ?, ?)`
 
-	if _, err := s.db.Exec(usersSeed, 1, 827383, "TestEmail", "TestToken", 300, true); err != nil {
+	if _, err := s.db.Exec(usersSeed, 1, 1238833, "TestEmail", "TestToken", 300, true); err != nil {
 		return fmt.Errorf("could not seed user data: %w", err)
 	}
 
-	if _, err := s.db.Exec(usersSeed, 2, 887333, "qwe@asd.com", "asdfjkdf;la34i", 300, true); err != nil {
+	if _, err := s.db.Exec(usersSeed, 2, 9898989, "qwe@asd.com", "asdfjkdf;la34i", 300, true); err != nil {
 		return fmt.Errorf("could not seed user data: %w", err)
 	}
 

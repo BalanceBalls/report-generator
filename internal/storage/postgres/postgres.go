@@ -1,4 +1,4 @@
-package sqlite
+package postgres
 
 import (
 	"context"
@@ -8,20 +8,20 @@ import (
 	"log/slog"
 	"time"
 
- //	_ "github.com/mattn/go-sqlite3"
+	_ "github.com/lib/pq"
 
 	"github.com/BalanceBalls/report-generator/internal/logger"
 	"github.com/BalanceBalls/report-generator/internal/report"
 	"github.com/BalanceBalls/report-generator/internal/storage"
 )
 
-type SqliteStorage struct {
+type PostgresStorage struct {
 	db *sql.DB
 }
 
-func New(name string) (*SqliteStorage, error) {
-	slog.Info("initializing DB...", "db_name=", name)
-	db, err := sql.Open("sqlite3", name)
+func New(connectionString string) (*PostgresStorage, error) {
+	slog.Info("initializing Postgres DB...")
+	db, err := sql.Open("postgres", connectionString)
 
 	if err != nil {
 		return nil, fmt.Errorf("could not open database:  %w", err)
@@ -31,10 +31,10 @@ func New(name string) (*SqliteStorage, error) {
 		return nil, fmt.Errorf("could not access database: %w", err)
 	}
 
-	return &SqliteStorage{db: db}, nil
+	return &PostgresStorage{db: db}, nil
 }
 
-func (s *SqliteStorage) Up(ctx context.Context) error {
+func (s *PostgresStorage) Up(ctx context.Context) error {
 	_, err := s.db.ExecContext(ctx, createUsersTable)
 	if err != nil {
 		return fmt.Errorf("could not create table users: %w", err)
@@ -53,7 +53,7 @@ func (s *SqliteStorage) Up(ctx context.Context) error {
 	return nil
 }
 
-func (s *SqliteStorage) AddUser(ctx context.Context, user report.User) error {
+func (s *PostgresStorage) AddUser(ctx context.Context, user report.User) error {
 	_, err := s.db.Exec(addUser, user.Id, user.GitlabId, user.UserEmail, user.UserToken, user.TimezoneOffset, user.IsActive)
 	if err != nil {
 		return fmt.Errorf("could not add new user: %w", err)
@@ -62,7 +62,7 @@ func (s *SqliteStorage) AddUser(ctx context.Context, user report.User) error {
 	return nil
 }
 
-func (s *SqliteStorage) UserExists(ctx context.Context, userId int64) bool {
+func (s *PostgresStorage) UserExists(ctx context.Context, userId int64) bool {
 	logger := logger.GetFromContext(ctx)
 	q, err := s.db.Prepare(checkUserExists)
 
@@ -85,7 +85,7 @@ func (s *SqliteStorage) UserExists(ctx context.Context, userId int64) bool {
 	return true
 }
 
-func (s *SqliteStorage) User(ctx context.Context, userId int64) (report.User, error) {
+func (s *PostgresStorage) User(ctx context.Context, userId int64) (report.User, error) {
 	q, err := s.db.Prepare(getUserById)
 
 	if err != nil {
@@ -106,7 +106,7 @@ func (s *SqliteStorage) User(ctx context.Context, userId int64) (report.User, er
 	return user, nil
 }
 
-func (s *SqliteStorage) UpdateUser(ctx context.Context, user report.User) error {
+func (s *PostgresStorage) UpdateUser(ctx context.Context, user report.User) error {
 	_, err := s.db.Exec(updateUser, user.GitlabId, user.UserEmail, user.UserToken, user.TimezoneOffset, user.Id)
 	if err != nil {
 		return fmt.Errorf("could not update user: %w", err)
@@ -115,7 +115,7 @@ func (s *SqliteStorage) UpdateUser(ctx context.Context, user report.User) error 
 	return nil
 }
 
-func (s *SqliteStorage) RemoveUser(ctx context.Context, userId int64) error {
+func (s *PostgresStorage) RemoveUser(ctx context.Context, userId int64) error {
 	_, err := s.db.Exec(removeUser, userId)
 	if err != nil {
 		return err
@@ -124,7 +124,7 @@ func (s *SqliteStorage) RemoveUser(ctx context.Context, userId int64) error {
 	return nil
 }
 
-func (s *SqliteStorage) Users(ctx context.Context) ([]storage.FlatUser, error) {
+func (s *PostgresStorage) Users(ctx context.Context) ([]storage.FlatUser, error) {
 	rows, err := s.db.QueryContext(ctx, getFullUsers, 10, 0)
 
 	if err != nil {

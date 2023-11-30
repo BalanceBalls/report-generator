@@ -11,3 +11,6 @@ rebuild:
 run:
 	make rebuild
 	./bin/report-generator
+
+compose:
+	docker compose up --build -d

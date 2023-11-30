@@ -14,7 +14,7 @@ import (
 	"github.com/BalanceBalls/report-generator/internal/logger"
 	"github.com/BalanceBalls/report-generator/internal/report"
 	"github.com/BalanceBalls/report-generator/internal/storage"
-	"github.com/BalanceBalls/report-generator/internal/storage/sqlite"
+	"github.com/BalanceBalls/report-generator/internal/storage/postgres"
 
 	tg "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
@@ -52,7 +52,8 @@ func New(cfg *Config) *ReportsBot {
 		panic(err)
 	}
 
-	sqlite, err := sqlite.New(cfg.DbName)
+	pgConnString := cfg.GetPostgresConnectionString()
+	pgSql, err := postgres.New(pgConnString)
 	if err != nil {
 		panic(err)
 	}
@@ -65,7 +66,7 @@ func New(cfg *Config) *ReportsBot {
 		Bot: *bot,
 
 		config:    cfg,
-		storage:   sqlite,
+		storage:   pgSql,
 		generator: html,
 		builder:   reportBuilder,
 	}
