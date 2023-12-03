@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS reports (
   id      SERIAL PRIMARY KEY,
   user_id INTEGER,
 
-  FOREIGN KEY(user_id) REFERENCES users(id)
+  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE ON UPDATE CASCADE
 )`
 
 	createRowsTable = `
@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS rows (
   link        TEXT,
   time_spent  REAL,
 
-  FOREIGN KEY(report_id) REFERENCES reports(id)
+  FOREIGN KEY(report_id) REFERENCES reports(id) ON DELETE CASCADE ON UPDATE CASCADE
 )`
 
 	getFullUsers = `
