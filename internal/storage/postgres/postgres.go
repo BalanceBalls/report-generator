@@ -135,7 +135,7 @@ func (s *PostgresStorage) SaveReport(ctx context.Context, report report.Report, 
 
 	columnsCnt := 5
 	values := make([]interface{}, 0, len(report.Rows)*columnsCnt)
-	query := "INSERT INTO rows (report_id, date, task, link, time_spent) VALUES "
+	query := addRows
 	for i, reportRow := range report.Rows {
 		query += fmt.Sprintf("($%d, $%d, $%d, $%d, $%d),",
 			columnsCnt*i+1, columnsCnt*i+2, columnsCnt*i+3, columnsCnt*i+4, columnsCnt*i+5)
