@@ -54,7 +54,8 @@ func (s *PostgresStorage) Up(ctx context.Context) error {
 }
 
 func (s *PostgresStorage) AddUser(ctx context.Context, user report.User) error {
-	_, err := s.db.Exec(addUser, user.Id, user.GitlabId, user.UserEmail, user.UserToken, user.TimezoneOffset, user.IsActive)
+	_, err := s.db.ExecContext(ctx, addUser,
+		user.Id, user.GitlabId, user.UserEmail, user.UserToken, user.TimezoneOffset, user.IsActive)
 	if err != nil {
 		return fmt.Errorf("could not add new user: %w", err)
 	}
@@ -107,7 +108,7 @@ func (s *PostgresStorage) User(ctx context.Context, userId int64) (report.User, 
 }
 
 func (s *PostgresStorage) UpdateUser(ctx context.Context, user report.User) error {
-	_, err := s.db.Exec(updateUser, user.GitlabId, user.UserEmail, user.UserToken, user.TimezoneOffset, user.Id)
+	_, err := s.db.ExecContext(ctx, updateUser, user.GitlabId, user.UserEmail, user.UserToken, user.TimezoneOffset, user.Id)
 	if err != nil {
 		return fmt.Errorf("could not update user: %w", err)
 	}
@@ -116,7 +117,36 @@ func (s *PostgresStorage) UpdateUser(ctx context.Context, user report.User) erro
 }
 
 func (s *PostgresStorage) RemoveUser(ctx context.Context, userId int64) error {
-	_, err := s.db.Exec(removeUser, userId)
+	_, err := s.db.ExecContext(ctx, removeUser, userId)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *PostgresStorage) SaveReport(ctx context.Context, report report.Report, userId int64) error {
+	lastInsertId := 0
+	err := s.db.QueryRowContext(ctx, addReport, userId).Scan(&lastInsertId)
+
+	if err != nil {
+		return err
+	}
+
+	columnsCnt := 5
+	values := make([]interface{}, 0, len(report.Rows)*columnsCnt)
+	query := "INSERT INTO rows (report_id, date, task, link, time_spent) VALUES "
+	for i, reportRow := range report.Rows {
+		query += fmt.Sprintf("($%d, $%d, $%d, $%d, $%d),",
+			columnsCnt*i+1, columnsCnt*i+2, columnsCnt*i+3, columnsCnt*i+4, columnsCnt*i+5)
+	
+		values = append(values, lastInsertId, reportRow.Date, reportRow.Task, reportRow.Link, reportRow.TimeSpent)
+	}
+
+	// Trim comma at the end
+	query = query[:len(query)-1]
+
+	_, err = s.db.Exec(query, values...)
 	if err != nil {
 		return err
 	}

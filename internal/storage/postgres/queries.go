@@ -71,4 +71,12 @@ WHERE id = $1
 SELECT 1 FROM users
 WHERE id = $1
 	`
+
+	addReport = `
+INSERT INTO reports (user_id) VALUES ($1) RETURNING id
+	`
+
+	addRows = `
+INSERT INTO rows (report_id, date, task, link, time_spent) VALUES 
+	`
 )

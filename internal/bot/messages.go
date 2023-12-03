@@ -4,6 +4,7 @@ const helloMsg = `Доступные команды:
 	/help - информация о боте
 	/reg - зарегистрироваться в боте
 	/unreg - удалить аккаунт
+	/profile - информация об аккаунте
 	/gen_day - сгенерировать репорт за день
 `
 
@@ -37,6 +38,7 @@ const (
 	userDataUpdateErrorMsg    = "Ошибка при обновлении данных пользователя"
 	userRegistrationErrorMsg  = "Ошибка при добавлении пользователя"
 	reportGenerationFailedMsg = "Ошибка при создании отчета"
+	fetchUserInfoFailedMsg    = "Ошибка при получении данных о пользователе"
 	tokenHasBeenSavedMsg      = "Токен успешно сохранен"
 	userHasBeenRemovedMsg     = "Аккаунт успешно удален"
 	gitlabIdHasBeenSavedMsg   = "Gitlab идентификатор пользователя сохранен"
@@ -44,4 +46,14 @@ const (
 	timezoneHasBeenSavedMsg   = "Часовой пояс успешно сохранен"
 	reportInProgressMsg       = "Отчет генерируется..."
 	emptyReportMsg            = "Нет данных для отчета. Отсутствуют события в git"
+	reportFileCaption         = "Отчет за сегодняшний день"
+	tokenIsSetMsg             = "токен установлен"
+	tokenIsNotSetMsg          = "токен не установлен"
 )
+
+const profileCmdTemplate = `
+------Данные пользователя------
+Часовой пояс: %d минут от GMT +0
+Gitlab id: %d
+Токен: %s
+`

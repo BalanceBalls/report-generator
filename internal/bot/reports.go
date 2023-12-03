@@ -3,6 +3,7 @@ package bot
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"math"
 	"strconv"
@@ -32,11 +33,12 @@ const empty = ""
 
 // commands
 const (
-	helpCmd   = "help"
-	regCmd    = "reg"
-	unregCmd  = "unreg"
-	genDayCmd = "gen_day"
-	startCmd  = "start"
+	helpCmd    = "help"
+	regCmd     = "reg"
+	unregCmd   = "unreg"
+	genDayCmd  = "gen_day"
+	startCmd   = "start"
+	profileCmd = "profile"
 )
 
 // user input prefixes
@@ -112,19 +114,18 @@ func (b *ReportsBot) Serve(ctx context.Context) {
 			dbUser, err := b.storage.User(updateCtx, userId)
 
 			if err != nil {
-				commandLogger.ErrorContext(updateCtx, "failed to get user info", "error", err)
+				commandLogger.ErrorContext(updateCtx, "failed to get user info", "reason", err)
 				if errors.Is(err, storage.ErrUserNotFound) {
-					b.sendText(userNotRegisteredMsg, chatId)
-					continue
+					b.sendText(userNotRegisteredMsg, chatId); continue
 				}
 			}
 
 			if strings.HasPrefix(userInput, setTokenPrefix) {
-				go b.setUserToken(updateCtx, userInput, chatId, dbUser)
+				go b.setUserToken(updateCtx, userInput, chatId, dbUser); continue
 			} else if strings.HasPrefix(userInput, setOffsetPrefix) {
-				go b.setUserTimezoneOffset(updateCtx, userInput, chatId, dbUser)
+				go b.setUserTimezoneOffset(updateCtx, userInput, chatId, dbUser); continue
 			} else if strings.HasPrefix(userInput, setGitlabIdPrefix) {
-				go b.setUserGitlabId(updateCtx, userInput, chatId, dbUser)
+				go b.setUserGitlabId(updateCtx, userInput, chatId, dbUser); continue
 			} else {
 				commandLogger.WarnContext(updateCtx, "user input was not recognized", "input", userInput)
 			}
@@ -138,20 +139,23 @@ func (b *ReportsBot) Serve(ctx context.Context) {
 		// Extract the command from the Message.
 		switch update.Message.Command() {
 		case startCmd:
-			commandLogger.InfoContext(updateCtx, "/start cmd reveived")
+			commandLogger.InfoContext(updateCtx, "/start cmd received")
 			go b.sendText(helloMsg, chatId)
 		case helpCmd:
-			commandLogger.InfoContext(updateCtx, "/help cmd reveived")
+			commandLogger.InfoContext(updateCtx, "/help cmd received")
 			go b.sendText(helpMsg, chatId)
 		case regCmd:
-			commandLogger.InfoContext(updateCtx, "/reg cmd reveived")
+			commandLogger.InfoContext(updateCtx, "/reg cmd received")
 			go b.handleRegistration(updateCtx, userId, chatId)
 		case unregCmd:
-			commandLogger.InfoContext(updateCtx, "/unreg cmd reveived")
+			commandLogger.InfoContext(updateCtx, "/unreg cmd received")
 			go b.handleUnregistration(updateCtx, userId, chatId)
 		case genDayCmd:
-			commandLogger.InfoContext(updateCtx, "/genDay cmd reveived")
+			commandLogger.InfoContext(updateCtx, "/genDay cmd received")
 			go b.handleReportGeneration(updateCtx, userId, chatId)
+		case profileCmd:
+			commandLogger.InfoContext(updateCtx, "/profile cmd received")
+			go b.handleProfileInfo(updateCtx, userId, chatId)
 		default:
 			commandLogger.WarnContext(updateCtx, "command was not recognized")
 		}
@@ -163,7 +167,7 @@ func (b *ReportsBot) handleReportGeneration(ctx context.Context, userId int64, c
 	user, err := b.storage.User(ctx, userId)
 
 	if err != nil {
-		logger.ErrorContext(ctx, "report generation failed", "error", err)
+		logger.ErrorContext(ctx, "report generation failed", "reason", err)
 		if errors.Is(err, storage.ErrUserNotFound) {
 			b.sendText(userNotRegisteredMsg, chatId)
 			return
@@ -185,39 +189,50 @@ func (b *ReportsBot) handleReportGeneration(ctx context.Context, userId int64, c
 	}
 
 	b.sendText(reportInProgressMsg, chatId)
+
 	respch := make(chan report.Channel)
 	go b.builder.Build(ctx, user, respch)
 
 	select {
 	case <-ctx.Done():
-		logger.ErrorContext(ctx, "update cancelled", "error", ctx.Err())
+		logger.ErrorContext(ctx, "update cancelled", "reason", ctx.Err())
 	case reportData := <-respch:
-		if reportData.Err != nil {
-			logger.ErrorContext(ctx, "failed to get report data", "error", reportData.Err)
-			if errors.Is(reportData.Err, gitlab.ErrNoGitActions) {
-				b.sendText(emptyReportMsg, chatId)
-				return
-			}
-			b.sendText(reportGenerationFailedMsg, chatId)
+		b.processReportResult(ctx, reportData, chatId, user.Id)
+	}
+}
+
+func (b *ReportsBot) processReportResult(ctx context.Context, reportData report.Channel, chatId int64, userId int64) {
+	logger := logger.GetFromContext(ctx)
+
+	if reportData.Err != nil {
+		logger.ErrorContext(ctx, "failed to get report data", "reason", reportData.Err)
+		if errors.Is(reportData.Err, gitlab.ErrNoGitActions) {
+			b.sendText(emptyReportMsg, chatId)
 			return
 		}
+		b.sendText(reportGenerationFailedMsg, chatId)
+		return
+	}
 
-		reportBytes, err := b.generator.Generate(reportData.Report)
-		if err != nil {
-			logger.ErrorContext(ctx, "report generation failed", "error", err)
-			return
-		}
+	if err := b.storage.SaveReport(ctx, reportData.Report, userId); err != nil {
+		logger.ErrorContext(ctx, "failed to save report to DB", "reason", err)
+	}
 
-		file := tg.FileBytes{
-			Name:  reportBytes.Name,
-			Bytes: reportBytes.Data,
-		}
+	reportBytes, err := b.generator.Generate(reportData.Report)
+	if err != nil {
+		logger.ErrorContext(ctx, "report generation failed", "reason", err)
+		return
+	}
 
-		msg := tg.NewDocument(chatId, file)
-		msg.Caption = "Отчет за сегодняшний день"
-		if _, err = b.Bot.Send(msg); err != nil {
-			logger.ErrorContext(ctx, "failed to send report", "reason", err.Error())
-		}
+	file := tg.FileBytes{
+		Name:  reportBytes.Name,
+		Bytes: reportBytes.Data,
+	}
+
+	msg := tg.NewDocument(chatId, file)
+	msg.Caption = reportFileCaption
+	if _, err = b.Bot.Send(msg); err != nil {
+		logger.ErrorContext(ctx, "failed to send report", "reason", err.Error())
 	}
 }
 
@@ -232,14 +247,14 @@ func (b *ReportsBot) handleRegistration(ctx context.Context, userId int64, chatI
 	newUser := report.User{
 		Id:             userId,
 		GitlabId:       0,
-		UserEmail:      "test@q.com",
-		UserToken:      "",
+		UserEmail:      empty,
+		UserToken:      empty,
 		IsActive:       true,
-		TimezoneOffset: 200,
+		TimezoneOffset: 0,
 	}
 
 	if err := b.storage.AddUser(ctx, newUser); err != nil {
-		logger.ErrorContext(ctx, "failed to add new user", "error", err)
+		logger.ErrorContext(ctx, "failed to add new user", "reason", err)
 		b.sendText(userRegistrationErrorMsg, chatId)
 
 		return
@@ -248,13 +263,39 @@ func (b *ReportsBot) handleRegistration(ctx context.Context, userId int64, chatI
 	b.sendText(userHasBeenRegisteredMsg, chatId)
 }
 
+func (b *ReportsBot) handleProfileInfo(ctx context.Context, userId int64, chatId int64) {
+	logger := logger.GetFromContext(ctx)
+	user, err := b.storage.User(ctx, userId)
+
+	if err != nil {
+		logger.ErrorContext(ctx, "failed to fetch user info", "reason", err)
+		if errors.Is(err, storage.ErrUserNotFound) {
+			b.sendText(userNotRegisteredMsg, chatId)
+			return
+		}
+		b.sendText(fetchUserInfoFailedMsg, chatId)
+		return
+	}
+
+	var tokenMsg string
+	if user.UserToken == empty {
+		tokenMsg = tokenIsNotSetMsg
+	} else {
+		tokenMsg = tokenIsSetMsg
+	}
+
+	responseMsg := fmt.Sprintf(profileCmdTemplate, user.TimezoneOffset, user.GitlabId, tokenMsg)
+
+	b.sendText(responseMsg, chatId)
+}
+
 func (b *ReportsBot) handleUnregistration(ctx context.Context, userId int64, chatId int64) {
 	logger := logger.GetFromContext(ctx)
 	isRegistered := b.storage.UserExists(ctx, userId)
 
 	if isRegistered {
 		if err := b.storage.RemoveUser(ctx, userId); err != nil {
-			logger.ErrorContext(ctx, "failed to remove user", "error", err)
+			logger.ErrorContext(ctx, "failed to remove user", "reason", err)
 			b.sendText(userDataUpdateErrorMsg, chatId)
 		}
 		b.sendText(userHasBeenRemovedMsg, chatId)
@@ -278,7 +319,7 @@ func (b *ReportsBot) setUserGitlabId(ctx context.Context, userInput string, chat
 	dbUser.GitlabId = updatedGitlabId
 
 	if err := b.storage.UpdateUser(ctx, dbUser); err != nil {
-		logger.ErrorContext(ctx, "failed to update user's gitlab id", "error", err)
+		logger.ErrorContext(ctx, "failed to update user's gitlab id", "reason", err)
 		b.sendText(userDataUpdateErrorMsg, chatId)
 		return
 	}
@@ -292,7 +333,7 @@ func (b *ReportsBot) setUserToken(ctx context.Context, userInput string, chatId 
 	dbUser.UserToken = updatedToken
 
 	if err := b.storage.UpdateUser(ctx, dbUser); err != nil {
-		logger.ErrorContext(ctx, "failed to update user's token", "error", err)
+		logger.ErrorContext(ctx, "failed to update user's token", "reason", err)
 		b.sendText(userDataUpdateErrorMsg, chatId)
 		return
 	}
@@ -310,14 +351,14 @@ func (b *ReportsBot) setUserTimezoneOffset(ctx context.Context, userInput string
 	}
 
 	if err != nil {
-		logger.ErrorContext(ctx, "failed to parse user input", "error", err)
+		logger.ErrorContext(ctx, "failed to parse user input", "reason", err)
 		b.sendText(userDataUpdateErrorMsg, chatId)
 		return
 	}
 
 	dbUser.TimezoneOffset = int(updatedOffset)
 	if err := b.storage.UpdateUser(ctx, dbUser); err != nil {
-		logger.ErrorContext(ctx, "failed to update user's timezone offset", "error", err)
+		logger.ErrorContext(ctx, "failed to update user's timezone offset", "reason", err)
 		b.sendText(userDataUpdateErrorMsg, chatId)
 		return
 	}
@@ -331,6 +372,6 @@ func (b *ReportsBot) sendText(text string, chatId int64) {
 	message.Text = text
 
 	if _, err := b.Bot.Send(message); err != nil {
-		slog.Error("failed to send a message to bot", "error", err)
+		slog.Error("failed to send a message to bot", "reason", err)
 	}
 }
