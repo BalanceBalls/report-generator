@@ -20,7 +20,7 @@ services:
       timeout: 5s
       retries: 5
   tg_bot:
-    container_name: tg-bot
+    container_name: tg_bot
     build: .
     ports:
       - "8080:8080"
