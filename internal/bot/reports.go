@@ -93,72 +93,80 @@ func (b *ReportsBot) Serve(ctx context.Context) {
 			continue
 		}
 
-		updateCtx, cancel := context.WithTimeout(ctx, time.Second*time.Duration(b.config.CommandsTimeout))
-		defer cancel()
+		go b.processUpdate(ctx, update)
+	}
+}
 
-		commandLogger := slog.With(
-			slog.Group("context",
-				slog.Int("trace_id", update.UpdateID),
-				slog.Int64("tg_chat_id", update.Message.Chat.ID),
-				slog.Int64("tg_user_id", update.Message.From.ID),
-				slog.String("text", update.Message.Text),
-			))
-		updateCtx = logger.AddToContext(updateCtx, commandLogger)
+func (b *ReportsBot) processUpdate(ctx context.Context, update tg.Update) {
+	updateCtx, cancel := context.WithTimeout(ctx, time.Second*time.Duration(b.config.CommandsTimeout))
+	defer cancel()
 
-		// Handling user input
-		if !update.Message.IsCommand() {
-			userId := update.Message.From.ID
-			chatId := update.Message.Chat.ID
+	commandLogger := slog.With(
+		slog.Group("context",
+			slog.Int("trace_id", update.UpdateID),
+			slog.Int64("tg_chat_id", update.Message.Chat.ID),
+			slog.Int64("tg_user_id", update.Message.From.ID),
+			slog.String("text", update.Message.Text),
+		))
+	updateCtx = logger.AttachToContext(updateCtx, commandLogger)
 
-			userInput := update.Message.Text
-			dbUser, err := b.storage.User(updateCtx, userId)
-
-			if err != nil {
-				commandLogger.ErrorContext(updateCtx, "failed to get user info", "reason", err)
-				if errors.Is(err, storage.ErrUserNotFound) {
-					b.sendText(userNotRegisteredMsg, chatId); continue
-				}
-			}
-
-			if strings.HasPrefix(userInput, setTokenPrefix) {
-				go b.setUserToken(updateCtx, userInput, chatId, dbUser); continue
-			} else if strings.HasPrefix(userInput, setOffsetPrefix) {
-				go b.setUserTimezoneOffset(updateCtx, userInput, chatId, dbUser); continue
-			} else if strings.HasPrefix(userInput, setGitlabIdPrefix) {
-				go b.setUserGitlabId(updateCtx, userInput, chatId, dbUser); continue
-			} else {
-				commandLogger.WarnContext(updateCtx, "user input was not recognized", "input", userInput)
-			}
-
-			continue
-		}
-
-		chatId := update.Message.Chat.ID
+	// Handling user input
+	if !update.Message.IsCommand() {
 		userId := update.Message.From.ID
+		chatId := update.Message.Chat.ID
 
-		// Extract the command from the Message.
-		switch update.Message.Command() {
-		case startCmd:
-			commandLogger.InfoContext(updateCtx, "/start cmd received")
-			go b.sendText(helloMsg, chatId)
-		case helpCmd:
-			commandLogger.InfoContext(updateCtx, "/help cmd received")
-			go b.sendText(helpMsg, chatId)
-		case regCmd:
-			commandLogger.InfoContext(updateCtx, "/reg cmd received")
-			go b.handleRegistration(updateCtx, userId, chatId)
-		case unregCmd:
-			commandLogger.InfoContext(updateCtx, "/unreg cmd received")
-			go b.handleUnregistration(updateCtx, userId, chatId)
-		case genDayCmd:
-			commandLogger.InfoContext(updateCtx, "/genDay cmd received")
-			go b.handleReportGeneration(updateCtx, userId, chatId)
-		case profileCmd:
-			commandLogger.InfoContext(updateCtx, "/profile cmd received")
-			go b.handleProfileInfo(updateCtx, userId, chatId)
-		default:
-			commandLogger.WarnContext(updateCtx, "command was not recognized")
+		userInput := update.Message.Text
+		dbUser, err := b.storage.User(updateCtx, userId)
+
+		if err != nil {
+			commandLogger.ErrorContext(updateCtx, "failed to get user info", "reason", err)
+			if errors.Is(err, storage.ErrUserNotFound) {
+				b.sendText(userNotRegisteredMsg, chatId)
+				return
+			}
 		}
+
+		if strings.HasPrefix(userInput, setTokenPrefix) {
+			b.setUserToken(updateCtx, userInput, chatId, dbUser)
+			return
+		} else if strings.HasPrefix(userInput, setOffsetPrefix) {
+			b.setUserTimezoneOffset(updateCtx, userInput, chatId, dbUser)
+			return
+		} else if strings.HasPrefix(userInput, setGitlabIdPrefix) {
+			b.setUserGitlabId(updateCtx, userInput, chatId, dbUser)
+			return
+		} else {
+			commandLogger.WarnContext(updateCtx, "user input was not recognized", "input", userInput)
+		}
+
+		return
+	}
+
+	chatId := update.Message.Chat.ID
+	userId := update.Message.From.ID
+
+	// Extract the command from the Message.
+	switch update.Message.Command() {
+	case startCmd:
+		commandLogger.InfoContext(updateCtx, "/start cmd received")
+		b.sendText(helloMsg, chatId)
+	case helpCmd:
+		commandLogger.InfoContext(updateCtx, "/help cmd received")
+		b.sendText(helpMsg, chatId)
+	case regCmd:
+		commandLogger.InfoContext(updateCtx, "/reg cmd received")
+		b.handleRegistration(updateCtx, userId, chatId)
+	case unregCmd:
+		commandLogger.InfoContext(updateCtx, "/unreg cmd received")
+		b.handleUnregistration(updateCtx, userId, chatId)
+	case genDayCmd:
+		commandLogger.InfoContext(updateCtx, "/genDay cmd received")
+		b.handleReportGeneration(updateCtx, userId, chatId)
+	case profileCmd:
+		commandLogger.InfoContext(updateCtx, "/profile cmd received")
+		b.handleProfileInfo(updateCtx, userId, chatId)
+	default:
+		commandLogger.WarnContext(updateCtx, "command was not recognized")
 	}
 }
 
