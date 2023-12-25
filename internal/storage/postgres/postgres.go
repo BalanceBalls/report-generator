@@ -161,7 +161,9 @@ func (s *PostgresStorage) Users(ctx context.Context) ([]storage.FlatUser, error)
 		return []storage.FlatUser{}, err
 	}
 
-	defer rows.Close()
+	defer func() {
+		err = rows.Close()
+	}()
 
 	result := []storage.FlatUser{}
 

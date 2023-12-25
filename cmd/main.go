@@ -13,13 +13,16 @@ import (
 func main() {
 	// Add tests
 	// log backups
-	// db backups 
+	// db backups
 
 	logFile, fileErr := os.Create("bot.log")
 	if fileErr != nil {
 		panic(fileErr)
 	}
-	defer logFile.Close()
+	defer func() {
+		err := logFile.Close()
+		panic(err)
+	}()
 
 	logger := slog.New(slog.NewJSONHandler(logFile, nil))
 	slog.SetDefault(logger)
